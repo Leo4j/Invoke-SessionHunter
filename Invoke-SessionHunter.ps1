@@ -324,11 +324,11 @@ function Invoke-SessionHunter {
 				$userTranslation = $user.Translate([System.Security.Principal.NTAccount])
 								
 				$results += [PSCustomObject]@{
-					Domain			= $currentDomain
+					Domain		= $currentDomain
 					HostName        = $Computer.Replace(".$currentDomain", "")
 					IPAddress       = $ipAddress
 					OperatingSystem = $operatingSystem
-					User            = $userTranslation
+					UserSession     = $userTranslation
 				}
 			} catch {
 				$searcher.Filter = "(objectSid=$sid)"
@@ -341,11 +341,11 @@ function Invoke-SessionHunter {
 				}
 				
 				$results += [PSCustomObject]@{
-					Domain			= $currentDomain
+					Domain		= $currentDomain
 					HostName        = $Computer.Replace(".$currentDomain", "")
 					IPAddress       = $ipAddress
 					OperatingSystem = $operatingSystem
-					User            = $usersam
+					UserSession     = $usersam
 				}
 			}
 		}
