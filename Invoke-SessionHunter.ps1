@@ -26,19 +26,19 @@ function Invoke-SessionHunter {
 	.PARAMETER Timeout
 	Timeout for the initial network scan
 	
-	.SWITCH Servers
+	.PARAMETER Servers
 	Retrieve and display information about active user sessions on servers only
 	
-	.SWITCH Workstations
+	.PARAMETER Workstations
 	Retrieve and display information about active user sessions on workstations only
 	
-	.SWITCH ExcludeLocalHost
+	.PARAMETER ExcludeLocalHost
 	Exclude localhost from the sessions retrieval
 	
-	.SWITCH RawResults
-	Return raw results instead of translating results into a custom PSObject.
+	.PARAMETER RawResults
+	Return custom PSObjects instead of table-formatted results
 	
-	.SWITCH ConnectionErrors
+	.PARAMETER ConnectionErrors
 	Show hostnames that returned connection errors
 
 	.EXAMPLE
@@ -73,24 +73,24 @@ function Invoke-SessionHunter {
 		$Timeout,
 		
 		[Parameter (Mandatory=$False, Position = 5, ValueFromPipeline=$true)]
-        [Switch]
-        $Servers,
+		[Switch]
+		$Servers,
 		
 		[Parameter (Mandatory=$False, Position = 6, ValueFromPipeline=$true)]
-        [Switch]
-        $Workstations,
+		[Switch]
+		$Workstations,
 		
 		[Parameter (Mandatory=$False, Position = 7, ValueFromPipeline=$true)]
-        [Switch]
-        $RawResults,
+		[Switch]
+		$RawResults,
 		
 		[Parameter (Mandatory=$False, Position = 8, ValueFromPipeline=$true)]
-        [Switch]
-        $ConnectionErrors,
+		[Switch]
+		$ConnectionErrors,
 		
 		[Parameter (Mandatory=$False, Position = 9, ValueFromPipeline=$true)]
-        [Switch]
-        $ExcludeLocalHost
+		[Switch]
+		$ExcludeLocalHost
 	
 	)
 	
@@ -130,7 +130,7 @@ function Invoke-SessionHunter {
 	
 	elseif($Targets){
   		$Computers = $Targets
-    	$Computers = $Computers -split ","
+  		$Computers = $Computers -split ","
 		$Computers = $Computers | ForEach-Object { $_ -replace '\..*', '' }
 		$Computers = $Computers | Sort-Object -Unique
 		
@@ -280,8 +280,8 @@ function Invoke-SessionHunter {
 		$results = @()
 		
 		# Gather computer information
-        $ipAddress = Resolve-DnsName $Computer | Where-Object { $_.Type -eq "A" } | Select-Object -ExpandProperty IPAddress
-        $operatingSystem = $computerDetails[$Computer.Replace(".$currentDomain", "")]
+		$ipAddress = Resolve-DnsName $Computer | Where-Object { $_.Type -eq "A" } | Select-Object -ExpandProperty IPAddress
+		$operatingSystem = $computerDetails[$Computer.Replace(".$currentDomain", "")]
 		
 		# Open the remote base key
 		try{
