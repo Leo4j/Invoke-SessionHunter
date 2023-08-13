@@ -63,7 +63,7 @@ Invoke-SessionHunter -Hunt "Administrator"
 Invoke-SessionHunter -ExcludeLocalHost
 ```
 
-### Return raw results instead of translating results into a custom PSObject
+### Return custom PSObjects instead of table-formatted results
 
 ```
 Invoke-SessionHunter -RawResults
