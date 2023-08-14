@@ -110,8 +110,11 @@ function Invoke-SessionHunter {
 		$currentDomain = $Domain
 	}
 	else{
-		$currentDomain = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()
-		$currentDomain = $currentDomain.Name
+		try{
+  			$currentDomain = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()
+			$currentDomain = $currentDomain.Name
+  		}
+    		catch{$currentDomain = Get-WmiObject -Namespace root\cimv2 -Class Win32_ComputerSystem | Select Domain | Format-Table -HideTableHeaders | out-string | ForEach-Object { $_.Trim() }}
 	}
 	$domainDistinguishedName = "DC=" + ($currentDomain -replace "\.", ",DC=")
 	$targetdomain = "LDAP://$domainDistinguishedName"
