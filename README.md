@@ -81,7 +81,9 @@ Invoke-SessionHunter -ConnectionErrors
 Invoke-SessionHunter -Timeout 100
 ```
 
-### Do not run a port scan to enumerate for alive hosts before trying to retrieve sessions (if a host is not reachable it will hang)
+### Do not run a port scan to enumerate for alive hosts before trying to retrieve sessions
+
+Note: if a host is not reachable it will hang for a while
 
 ```
 Invoke-SessionHunter -NoPortScan
