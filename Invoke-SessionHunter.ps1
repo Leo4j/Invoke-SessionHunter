@@ -41,6 +41,9 @@ function Invoke-SessionHunter {
 	.PARAMETER ConnectionErrors
 	Show hostnames that returned connection errors
 
+ 	.PARAMETER NoPortScan
+	Do not run a port scan to enumerate for alive hosts before trying to retrieve sessions
+
 	.EXAMPLE
 	Invoke-SessionHunter
 	Invoke-SessionHunter -Domain contoso.local
@@ -90,7 +93,11 @@ function Invoke-SessionHunter {
 		
 		[Parameter (Mandatory=$False, Position = 9, ValueFromPipeline=$true)]
 		[Switch]
-		$ExcludeLocalHost
+		$ExcludeLocalHost,
+
+  		[Parameter (Mandatory=$False, Position = 10, ValueFromPipeline=$true)]
+		[Switch]
+		$NoPortScan
 	
 	)
 	
@@ -237,30 +244,34 @@ function Invoke-SessionHunter {
 		$Computers = $Computers | Where-Object {$_ -ne "$env:computername"}
 		$Computers = $Computers | Where-Object {$_ -ne "$HostFQDN"}
 	}
+
+ 	if(!$NoPortScan){
 	
-	$reachable_hosts = $null
-	$Tasks = $null
-	$total = $Computers.Count
-	$count = 0
-	
-	if(!$Timeout){$Timeout = "100"}
-	
-	$reachable_hosts = @()
-	
-	$Tasks = $Computers | % {
-		Write-Progress -Activity "Scanning Ports" -Status "$count out of $total hosts scanned" -PercentComplete ($count / $total * 100)
-		$tcpClient = New-Object System.Net.Sockets.TcpClient
-		$asyncResult = $tcpClient.BeginConnect($_, 135, $null, $null)
-		$wait = $asyncResult.AsyncWaitHandle.WaitOne($Timeout)
-		if($wait) {
-			$tcpClient.EndConnect($asyncResult)
-			$tcpClient.Close()
-			$reachable_hosts += $_
-		} else {}
-		$count++
-	}
-	
-	$Computers = $reachable_hosts
+		$reachable_hosts = $null
+		$Tasks = $null
+		$total = $Computers.Count
+		$count = 0
+		
+		if(!$Timeout){$Timeout = "100"}
+		
+		$reachable_hosts = @()
+		
+		$Tasks = $Computers | % {
+			Write-Progress -Activity "Scanning Ports" -Status "$count out of $total hosts scanned" -PercentComplete ($count / $total * 100)
+			$tcpClient = New-Object System.Net.Sockets.TcpClient
+			$asyncResult = $tcpClient.BeginConnect($_, 135, $null, $null)
+			$wait = $asyncResult.AsyncWaitHandle.WaitOne($Timeout)
+			if($wait) {
+				$tcpClient.EndConnect($asyncResult)
+				$tcpClient.Close()
+				$reachable_hosts += $_
+			} else {}
+			$count++
+		}
+		
+		$Computers = $reachable_hosts
+
+ 	}
 	
 	if(!$Domain){
 		$Computers = $Computers | ForEach-Object { $_ -replace '\..*', '' }
