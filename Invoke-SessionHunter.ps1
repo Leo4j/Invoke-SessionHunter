@@ -395,7 +395,8 @@ function Invoke-SessionHunter {
 		$allResults += $runspace.Pipe.EndInvoke($runspace.Status)
 		$runspace.Pipe.Dispose()
 	}
-	
+
+ 	# Show Results
 	if($RawResults){
 		if($Hunt){
 			$allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, UserSession
