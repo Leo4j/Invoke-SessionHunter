@@ -10,6 +10,13 @@ function Invoke-SessionHunter {
 	Retrieve and display information about active user sessions on remote computers
 	Admin privileges on the remote systems are not needed
 	If run without parameters or switches it will retrieve active sessions for all computers in the current domain
+	The tool leverages the remote registry service to query the HKEY_USERS registry hive on the remote computers.
+	It identifies and extracts Security Identifiers (SIDs) associated with active user sessions,
+	and translates these into corresponding usernames, offering insights into who is currently logged in.
+	It's important to note that the remote registry service needs to be running on the remote computer for the tool to work effectively.
+	In my tests, if the service is stopped but its Startup type is configured to "Automatic" or "Manual",
+	the service will start automatically on the target computer once queried (this is native behavior),
+	and sessions information will be retrieved. If set to "Disabled" no session information can be retrieved from the target.
 	
 	.PARAMETER Domain
 	Specify the target domain
@@ -24,7 +31,7 @@ function Invoke-SessionHunter {
 	Show active session for the specified user only
 	
 	.PARAMETER Timeout
-	Timeout for the initial network scan
+	Timeout for the initial network scan (default: 50ms)
 	
 	.PARAMETER Servers
 	Retrieve and display information about active user sessions on servers only
@@ -255,7 +262,7 @@ function Invoke-SessionHunter {
 		$total = $Computers.Count
 		$count = 0
 		
-		if(!$Timeout){$Timeout = "100"}
+		if(!$Timeout){$Timeout = "50"}
 		
 		$reachable_hosts = @()
 		
@@ -272,6 +279,8 @@ function Invoke-SessionHunter {
 			$count++
 		}
 		
+		Write-Progress -Activity "Scanning Ports" -Completed
+		
 		$Computers = $reachable_hosts
 
  	}
@@ -280,104 +289,123 @@ function Invoke-SessionHunter {
 		$Computers = $Computers | ForEach-Object { $_ -replace '\..*', '' }
 	}
 	
-	$allresults = @()
-	
-	foreach($Computer in $Computers){
-		
-		# Clearing variables
-		$userSIDs = $null
-		$userKeys = $null
-		$remoteRegistry = $null
-		$user = $null
-		$userTranslation = $null
-		
-		$results = @()
-		
-		# Gather computer information
-		$ipAddress = Resolve-DnsName $Computer | Where-Object { $_.Type -eq "A" } | Select-Object -ExpandProperty IPAddress
-		$operatingSystem = $computerDetails[$Computer.Replace(".$currentDomain", "")]
-		
-		# Open the remote base key
-		try{
-			$remoteRegistry = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('Users', $Computer)
-		}
-		
-		catch{
-			if($ConnectionErrors){
-				Write-Host ""
-				Write-Host "Failed to connect to computer: $Computer"
-			}
-			continue # Skip to the next iteration
-		}
+	# Create a runspace pool
+	$runspacePool = [runspacefactory]::CreateRunspacePool(1, [Environment]::ProcessorCount)
+	$runspacePool.Open()
 
-		# Get the subkeys under HKEY_USERS
-		$userKeys = $remoteRegistry.GetSubKeyNames()
+	# Create an array to hold the runspaces
+	$runspaces = @()
 
-		# Initialize an array to store the user SIDs
-		$userSIDs = @()
+	# Iterate through the computers, creating a runspace for each
+	foreach ($Computer in $Computers) {
+		# ScriptBlock that contains the processing code
+		$scriptBlock = {
+			param($Computer, $currentDomain, $ConnectionErrors, $computerDetails, $searcher)
 
-		foreach ($key in $userKeys) {
-			# Skip common keys that are not user SIDs
-			if ($key -match '^[Ss]-\d-\d+-(\d+-){1,14}\d+$') {
-				$userSIDs += $key
-			}
-		}
-
-		# Close the remote registry key
-		$remoteRegistry.Close()
-		
-		$results = @()
-
-		# Resolve the SIDs to usernames
-		foreach ($sid in $userSIDs) {
+			# Clearing variables
+			$userSIDs = $null
+			$userKeys = $null
+			$remoteRegistry = $null
 			$user = $null
 			$userTranslation = $null
-		
+
+			$results = @()
+
+			# Gather computer information
+			$ipAddress = Resolve-DnsName $Computer | Where-Object { $_.Type -eq "A" } | Select-Object -ExpandProperty IPAddress
+			$operatingSystem = $computerDetails[$Computer.Replace(".$currentDomain", "")]
+
+			# Open the remote base key
 			try {
-				$user = New-Object System.Security.Principal.SecurityIdentifier($sid)
-				$userTranslation = $user.Translate([System.Security.Principal.NTAccount])
-								
-				$results += [PSCustomObject]@{
-					Domain		= $currentDomain
-					HostName        = $Computer.Replace(".$currentDomain", "")
-					IPAddress       = $ipAddress
-					OperatingSystem = $operatingSystem
-					UserSession     = $userTranslation
-				}
+				$remoteRegistry = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('Users', $Computer)
 			} catch {
-				$searcher.Filter = "(objectSid=$sid)"
-				$userTranslation = $searcher.FindOne()
-				$user = $userTranslation.GetDirectoryEntry()
-				$usersam = $user.Properties["samAccountName"].Value
-				$netdomain = ([ADSI]"LDAP://$currentDomain").dc -Join " - "
-				if ($usersam -notcontains '\') {
-					$usersam = "$netdomain\" + $usersam
+				if ($ConnectionErrors) {
+					Write-Host ""
+					Write-Host "Failed to connect to computer: $Computer"
 				}
-				
-				$results += [PSCustomObject]@{
-					Domain		= $currentDomain
-					HostName        = $Computer.Replace(".$currentDomain", "")
-					IPAddress       = $ipAddress
-					OperatingSystem = $operatingSystem
-					UserSession     = $usersam
+				continue
+			}
+
+			# Get the subkeys under HKEY_USERS
+			$userKeys = $remoteRegistry.GetSubKeyNames()
+
+			# Initialize an array to store the user SIDs
+			$userSIDs = @()
+
+			foreach ($key in $userKeys) {
+				# Skip common keys that are not user SIDs
+				if ($key -match '^[Ss]-\d-\d+-(\d+-){1,14}\d+$') {
+					$userSIDs += $key
 				}
 			}
+
+			# Close the remote registry key
+			$remoteRegistry.Close()
+
+			$results = @()
+
+			# Resolve the SIDs to usernames
+			foreach ($sid in $userSIDs) {
+				$user = $null
+				$userTranslation = $null
+
+				try {
+					$user = New-Object System.Security.Principal.SecurityIdentifier($sid)
+					$userTranslation = $user.Translate([System.Security.Principal.NTAccount])
+
+					$results += [PSCustomObject]@{
+						Domain           = $currentDomain
+						HostName         = $Computer.Replace(".$currentDomain", "")
+						IPAddress        = $ipAddress
+						OperatingSystem  = $operatingSystem
+						UserSession      = $userTranslation
+					}
+				} catch {
+					$searcher.Filter = "(objectSid=$sid)"
+					$userTranslation = $searcher.FindOne()
+					$user = $userTranslation.GetDirectoryEntry()
+					$usersam = $user.Properties["samAccountName"].Value
+					$netdomain = ([ADSI]"LDAP://$currentDomain").dc -Join " - "
+					if ($usersam -notcontains '\') {
+						$usersam = "$netdomain\" + $usersam
+					}
+
+					$results += [PSCustomObject]@{
+						Domain           = $currentDomain
+						HostName         = $Computer.Replace(".$currentDomain", "")
+						IPAddress        = $ipAddress
+						OperatingSystem  = $operatingSystem
+						UserSession      = $usersam
+					}
+				}
+			}
+
+			# Returning the results
+			return $results
 		}
-		
-		$allResults += $results
-	
+
+		$runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($Computer).AddArgument($currentDomain).AddArgument($ConnectionErrors).AddArgument($computerDetails).AddArgument($searcher)
+		$runspace.RunspacePool = $runspacePool
+		$runspaces += [PSCustomObject]@{ Pipe = $runspace; Status = $runspace.BeginInvoke() }
+	}
+
+	# Wait for all runspaces to complete
+	$allResults = @()
+	foreach ($runspace in $runspaces) {
+		$allResults += $runspace.Pipe.EndInvoke($runspace.Status)
+		$runspace.Pipe.Dispose()
 	}
 	
 	if($RawResults){
 		if($Hunt){
-			$allResults | Where-Object { $_.User -like "*$Hunt*" }
+			$allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, UserSession
 		}
-		else{$allResults}
+		else{$allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, UserSession}
 	}
 	else{
 		if($Hunt){
-			$allResults | Where-Object { $_.User -like "*$Hunt*" } | Format-Table -AutoSize
+			$allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, UserSession | Format-Table -AutoSize
 		}
-		else{$allResults | Format-Table -AutoSize}
+		else{$allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, UserSession | Format-Table -AutoSize}
 	}
 }
