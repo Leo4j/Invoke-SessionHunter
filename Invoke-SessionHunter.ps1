@@ -4,7 +4,7 @@ function Invoke-SessionHunter {
 
 	.SYNOPSIS
 	Invoke-SessionHunter Author: Rob LP (@L3o4j)
-	https://github.com/Leo4j/Invoke-SessionHunter/
+	https://github.com/Leo4j/Invoke-SessionHunter
 
 	.DESCRIPTION
 	Retrieve and display information about active user sessions on remote computers
