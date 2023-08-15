@@ -75,10 +75,10 @@ Invoke-SessionHunter -RawResults
 Invoke-SessionHunter -ConnectionErrors
 ```
 
-### Timeout for the initial network scan
+### Timeout for the initial network scan (default: 100ms)
 
 ```
-Invoke-SessionHunter -Timeout 100
+Invoke-SessionHunter -Timeout 50
 ```
 
 ### Do not run a port scan to enumerate for alive hosts before trying to retrieve sessions
