@@ -127,6 +127,8 @@ function Invoke-SessionHunter {
 	$targetdomain = "LDAP://$domainDistinguishedName"
 	$searcher = New-Object System.DirectoryServices.DirectorySearcher
 	$searcher.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry $targetdomain
+
+ 	$searcher.PageSize = 1000
 	
 	if($TargetsFile){
 		$Computers = Get-Content -Path $TargetsFile
