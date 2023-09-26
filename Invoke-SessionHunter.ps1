@@ -104,7 +104,11 @@ function Invoke-SessionHunter {
 
   		[Parameter (Mandatory=$False, Position = 10, ValueFromPipeline=$true)]
 		[Switch]
-		$NoPortScan
+		$NoPortScan,
+		
+		[Parameter (Mandatory=$False, Position = 10, ValueFromPipeline=$true)]
+		[Switch]
+		$AdmCount
 	
 	)
 	
@@ -404,33 +408,59 @@ function Invoke-SessionHunter {
 		$allResults += $runspace.Pipe.EndInvoke($runspace.Status)
 		$runspace.Pipe.Dispose()
 	}
-
- 	$ldapPath = "LDAP://$currentDomain"
-	$directoryEntry = New-Object System.DirectoryServices.DirectoryEntry $ldapPath
-	$searcher = New-Object System.DirectoryServices.DirectorySearcher $directoryEntry
-
+	
 	foreach ($result in $allResults) {
 	    $targetsresult = $result.HostName + '.' + $result.Domain
 	    $result.Access = Test-Access -Target $targetsresult
-	    $username = ($result.UserSession -split '\\')[1]
-	    $tempdomain = ($result.UserSession -split '\\')[0]
+	}
 	
-	    # Use the persistent searcher object
-	    $result.AdmCount = AdminCount -UserName $username -Searcher $searcher
+	if($AdmCount){
+	
+		$ldapPath = "LDAP://$currentDomain"
+		$directoryEntry = New-Object System.DirectoryServices.DirectoryEntry $ldapPath
+		$searcher = New-Object System.DirectoryServices.DirectorySearcher $directoryEntry
+		
+		foreach ($result in $allResults) {
+			$username = ($result.UserSession -split '\\')[1]
+			$tempdomain = ($result.UserSession -split '\\')[0]
+			$result.AdmCount = AdminCount -UserName $username -Searcher $searcher
+		}
 	}
 
+ 	
+
+
  	# Show Results
-	if($RawResults){
-		if($Hunt){
-			$allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount
+	
+	if($AdmCount){
+	
+		if($RawResults){
+			if($Hunt){
+				$allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount
+			}
+			else{$allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount}
 		}
-		else{$allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount}
+		else{
+			if($Hunt){
+				$allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount | Format-Table -AutoSize
+			}
+			else{$allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount | Format-Table -AutoSize}
+		}
 	}
+	
 	else{
-		if($Hunt){
-			$allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount | Format-Table -AutoSize
+		if($RawResults){
+			if($Hunt){
+				$allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession
+			}
+			else{$allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession}
 		}
-		else{$allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount | Format-Table -AutoSize}
+		else{
+			if($Hunt){
+				$allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession | Format-Table -AutoSize
+			}
+			else{$allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession | Format-Table -AutoSize}
+		}
 	}
 }
 
