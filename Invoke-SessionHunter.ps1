@@ -106,11 +106,11 @@ function Invoke-SessionHunter {
 		[Switch]
 		$NoPortScan,
 		
-		[Parameter (Mandatory=$False, Position = 10, ValueFromPipeline=$true)]
+		[Parameter (Mandatory=$False, Position = 11, ValueFromPipeline=$true)]
 		[Switch]
 		$AdmCount,
 
-  		[Parameter (Mandatory=$False, Position = 10, ValueFromPipeline=$true)]
+  		[Parameter (Mandatory=$False, Position = 12, ValueFromPipeline=$true)]
 		[Switch]
 		$TestAccess
 	
