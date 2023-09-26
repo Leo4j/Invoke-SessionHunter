@@ -404,14 +404,19 @@ function Invoke-SessionHunter {
 		$allResults += $runspace.Pipe.EndInvoke($runspace.Status)
 		$runspace.Pipe.Dispose()
 	}
+
+ 	$ldapPath = "LDAP://$currentDomain"
+	$directoryEntry = New-Object System.DirectoryServices.DirectoryEntry $ldapPath
+	$searcher = New-Object System.DirectoryServices.DirectorySearcher $directoryEntry
+
+	foreach ($result in $allResults) {
+	    $targetsresult = $result.HostName + '.' + $result.Domain
+	    $result.Access = Test-Access -Target $targetsresult
+	    $username = ($result.UserSession -split '\\')[1]
+	    $tempdomain = ($result.UserSession -split '\\')[0]
 	
-	foreach($result in $allResults){
-		$targetsresult = $result.HostName + '.' + $result.Domain
-		$result.Access = Test-Access -Target $targetsresult
-		#$username = $result.UserSession
-		$username = ($result.UserSession -split '\\')[1]
-		$tempdomain = ($result.UserSession -split '\\')[0]
-		$result.AdmCount = AdminCount -UserName $username -Domain $tempdomain
+	    # Use the persistent searcher object
+	    $result.AdmCount = AdminCount -UserName $username -Searcher $searcher
 	}
 
  	# Show Results
@@ -446,17 +451,14 @@ function Test-Access {
 function AdminCount {
     param (
         [string]$UserName,
-        [string]$Domain
+        [System.DirectoryServices.DirectorySearcher]$Searcher
     )
 
-    $ldapPath = "LDAP://$Domain"
-    $directoryEntry = New-Object System.DirectoryServices.DirectoryEntry $ldapPath
-    $searcher = New-Object System.DirectoryServices.DirectorySearcher $directoryEntry
-
-    $searcher.Filter = "(sAMAccountName=$UserName)"
-    $searcher.PropertiesToLoad.Add("adminCount") > $null
+    $Searcher.Filter = "(sAMAccountName=$UserName)"
+    $Searcher.PropertiesToLoad.Clear() # Clear any previous properties
+    $Searcher.PropertiesToLoad.Add("adminCount") > $null
     
-    $user = $searcher.FindOne()
+    $user = $Searcher.FindOne()
 
     if ($user -ne $null) {
         $adminCount = $user.Properties["adminCount"]
