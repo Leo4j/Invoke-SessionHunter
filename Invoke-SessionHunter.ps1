@@ -104,15 +104,7 @@ function Invoke-SessionHunter {
 
   		[Parameter (Mandatory=$False, Position = 10, ValueFromPipeline=$true)]
 		[Switch]
-		$NoPortScan,
-		
-		[Parameter (Mandatory=$False, Position = 11, ValueFromPipeline=$true)]
-		[Switch]
-		$AdmCount,
-
-  		[Parameter (Mandatory=$False, Position = 12, ValueFromPipeline=$true)]
-		[Switch]
-		$TestAccess
+		$NoPortScan
 	
 	)
 	
@@ -135,24 +127,12 @@ function Invoke-SessionHunter {
 	$targetdomain = "LDAP://$domainDistinguishedName"
 	$searcher = New-Object System.DirectoryServices.DirectorySearcher
 	$searcher.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry $targetdomain
-
  	$searcher.PageSize = 1000
 	
 	if($TargetsFile){
 		$Computers = Get-Content -Path $TargetsFile
 		$Computers = $Computers | ForEach-Object { $_ -replace '\..*', '' }
 		$Computers = $Computers | Sort-Object -Unique
-		
-		$computerDetails = @{}
-		
-		foreach ($computer in $Computers) {
-			$ldapFilter = "(&(objectCategory=computer)(cn=$computer))"
-			$searcher.Filter = $ldapFilter
-			$result = $searcher.FindOne()
-			$name = $computer
-			$OS = $result.Properties["operatingsystem"][0]
-			$computerDetails[$name] = $OS
-		}
 	}
 	
 	elseif($Targets){
@@ -160,30 +140,12 @@ function Invoke-SessionHunter {
   		$Computers = $Computers -split ","
 		$Computers = $Computers | ForEach-Object { $_ -replace '\..*', '' }
 		$Computers = $Computers | Sort-Object -Unique
-		
-		$computerDetails = @{}
-		
-		foreach ($computer in $Computers) {
-			$ldapFilter = "(&(objectCategory=computer)(cn=$computer))"
-			$searcher.Filter = $ldapFilter
-			$result = $searcher.FindOne()
-			$name = $computer
-			$OS = $result.Properties["operatingsystem"][0]
-			$computerDetails[$name] = $OS
-		}
 	}
 	
 	elseif($Servers){
 		$ldapFilter = "(&(objectCategory=computer)(operatingSystem=*server*))"
 		$searcher.Filter = $ldapFilter
 		$allservers = $searcher.FindAll()
-		
-		$computerDetails = @{}
-		foreach ($server in $allservers) {
-			$name = $server.Properties["name"][0]
-			$OS = $server.Properties["operatingsystem"][0]
-			$computerDetails[$name] = $OS
-		}
 		
 		$Computers = $null
 		$Computers = @()
@@ -199,13 +161,6 @@ function Invoke-SessionHunter {
 		$searcher.Filter = $ldapFilter
 		$allworkstations = $searcher.FindAll()
 		
-		$computerDetails = @{}
-		foreach ($workstation in $allworkstations) {
-			$name = $workstation.Properties["name"][0]
-			$OS = $workstation.Properties["operatingsystem"][0]
-			$computerDetails[$name] = $OS
-		}
-		
 		$Computers = $null
 		$Computers = @()
 		foreach ($workstation in $allworkstations) {
@@ -219,13 +174,6 @@ function Invoke-SessionHunter {
 		$ldapFilter = "(objectCategory=computer)"
 		$searcher.Filter = $ldapFilter
 		$allcomputers = $searcher.FindAll()
-		
-		$computerDetails = @{}
-		foreach ($computer in $allcomputers) {
-			$name = $computer.Properties["name"][0]
-			$OS = $computer.Properties["operatingsystem"][0]
-			$computerDetails[$name] = $OS
-		}
 		
 		$Computers = $null
 		$Computers = @()
@@ -313,7 +261,7 @@ function Invoke-SessionHunter {
 	foreach ($Computer in $Computers) {
 		# ScriptBlock that contains the processing code
 		$scriptBlock = {
-			param($Computer, $currentDomain, $ConnectionErrors, $computerDetails, $searcher)
+			param($Computer, $currentDomain, $ConnectionErrors, $searcher)
 
 			# Clearing variables
 			$userSIDs = $null
@@ -326,7 +274,6 @@ function Invoke-SessionHunter {
 
 			# Gather computer information
 			$ipAddress = Resolve-DnsName $Computer | Where-Object { $_.Type -eq "A" } | Select-Object -ExpandProperty IPAddress
-			$operatingSystem = $computerDetails[$Computer.Replace(".$currentDomain", "")]
 
 			# Open the remote base key
 			try {
@@ -370,7 +317,7 @@ function Invoke-SessionHunter {
 						Domain           = $currentDomain
 						HostName         = $Computer.Replace(".$currentDomain", "")
 						IPAddress        = $ipAddress
-						OperatingSystem  = $operatingSystem
+						OperatingSystem  = $null
 						Access           = $null
 						UserSession      = $userTranslation
 						AdmCount         = "NO"
@@ -389,7 +336,7 @@ function Invoke-SessionHunter {
 						Domain           = $currentDomain
 						HostName         = $Computer.Replace(".$currentDomain", "")
 						IPAddress        = $ipAddress
-						OperatingSystem  = $operatingSystem
+						OperatingSystem  = $null
 						Access           = $null
 						UserSession      = $usersam
 						AdmCount         = "NO"
@@ -401,7 +348,7 @@ function Invoke-SessionHunter {
 			return $results
 		}
 
-		$runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($Computer).AddArgument($currentDomain).AddArgument($ConnectionErrors).AddArgument($computerDetails).AddArgument($searcher)
+		$runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($Computer).AddArgument($currentDomain).AddArgument($ConnectionErrors).AddArgument($searcher)
 		$runspace.RunspacePool = $runspacePool
 		$runspaces += [PSCustomObject]@{ Pipe = $runspace; Status = $runspace.BeginInvoke() }
 	}
@@ -413,119 +360,63 @@ function Invoke-SessionHunter {
 		$runspace.Pipe.Dispose()
 	}
 
- 	if($TestAccess){
-	
-		# Define RunspacePool
-		$runspacePool = [runspacefactory]::CreateRunspacePool(1, [Environment]::ProcessorCount)
-		$runspacePool.Open()
+	# Define RunspacePool
+	$runspacePool = [runspacefactory]::CreateRunspacePool(1, [Environment]::ProcessorCount)
+	$runspacePool.Open()
 
-		$runspaces = @()
+	$runspaces = @()
 
-		foreach ($result in $allResults) {
-			$target = "$($result.HostName).$($result.Domain)"
-			
-			$powershell = [powershell]::Create().AddScript({
-				$Error.Clear()
-				ls "\\$args\c$" > $null
-				return ($error[0] -eq $null)
-			}).AddArgument($target)
-
-			$powershell.RunspacePool = $runspacePool
-
-			$runspaces += [PSCustomObject]@{
-				PowerShell = $powershell
-				Status = $powershell.BeginInvoke()
-				Result = $result
-			}
-		}
-
-		# Wait and collect results
-		foreach ($runspace in $runspaces) {
-			$runspace.Result.Access = [bool]($runspace.PowerShell.EndInvoke($runspace.Status))
-			$runspace.PowerShell.Dispose()
-		}
-
-		$runspacePool.Close()
-		$runspacePool.Dispose()
-
-  	}
-	
-	if($AdmCount){
-	
-		$ldapPath = "LDAP://$currentDomain"
-		$directoryEntry = New-Object System.DirectoryServices.DirectoryEntry $ldapPath
-		$searcher = New-Object System.DirectoryServices.DirectorySearcher $directoryEntry
+	foreach ($result in $allResults) {
+		$target = "$($result.HostName).$($result.Domain)"
 		
-		foreach ($result in $allResults) {
-			$username = ($result.UserSession -split '\\')[1]
-			$tempdomain = ($result.UserSession -split '\\')[0]
-			$result.AdmCount = AdminCount -UserName $username -Searcher $searcher
+		$powershell = [powershell]::Create().AddScript({
+			$Error.Clear()
+			Get-WmiObject -Class Win32_OperatingSystem -ComputerName $args > $null
+			#ls "\\$args\c$" > $null
+			return ($error[0] -eq $null)
+		}).AddArgument($target)
+
+		$powershell.RunspacePool = $runspacePool
+
+		$runspaces += [PSCustomObject]@{
+			PowerShell = $powershell
+			Status = $powershell.BeginInvoke()
+			Result = $result
 		}
 	}
 
+	# Wait and collect results
+	foreach ($runspace in $runspaces) {
+		$runspace.Result.Access = [bool]($runspace.PowerShell.EndInvoke($runspace.Status))
+		$runspace.PowerShell.Dispose()
+	}
+
+	$runspacePool.Close()
+	$runspacePool.Dispose()
+	
+	foreach ($result in $allResults) {
+		$username = ($result.UserSession -split '\\')[1]
+		$tempdomain = ($result.UserSession -split '\\')[0]
+		$TargetHost = $result.HostName
+		$result.AdmCount = AdminCount -UserName $username -Searcher $searcher
+		$result.OperatingSystem = Get-OS -HostName $TargetHost -Searcher $searcher
+	}
+	
  	# Show Results
-	
-	if($AdmCount){
-		if($TestAccess){
-			if($RawResults){
-				if($Hunt){
-					$allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount
-				}
-				else{$allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount}
-			}
-			else{
-				if($Hunt){
-					$allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount | Format-Table -AutoSize
-				}
-				else{$allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount | Format-Table -AutoSize}
-			}
-   		}
-     		else{
-       			if($RawResults){
-				if($Hunt){
-					$allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, UserSession, AdmCount
-				}
-				else{$allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, UserSession, AdmCount}
-			}
-			else{
-				if($Hunt){
-					$allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, UserSession, AdmCount | Format-Table -AutoSize
-				}
-				else{$allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, UserSession, AdmCount | Format-Table -AutoSize}
-			}
+
+	if($RawResults){
+		if($Hunt){
+			$allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount
 		}
+		else{$allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount}
 	}
-	
 	else{
- 		if($TestAccess){
-			if($RawResults){
-				if($Hunt){
-					$allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession
-				}
-				else{$allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession}
-			}
-			else{
-				if($Hunt){
-					$allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession | Format-Table -AutoSize
-				}
-				else{$allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession | Format-Table -AutoSize}
-			}
-   		}
-     		else{
-       			if($RawResults){
-				if($Hunt){
-					$allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, UserSession
-				}
-				else{$allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, UserSession}
-			}
-			else{
-				if($Hunt){
-					$allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, UserSession | Format-Table -AutoSize
-				}
-				else{$allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, UserSession | Format-Table -AutoSize}
-			}
+		if($Hunt){
+			$allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount | Format-Table -AutoSize
 		}
+		else{$allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount | Format-Table -AutoSize}
 	}
+	
 }
 
 function AdminCount {
@@ -547,4 +438,25 @@ function AdminCount {
         }
     }
     return $false
+}
+
+function Get-OS {
+    param (
+        [string]$HostName,
+		[System.DirectoryServices.DirectorySearcher]$Searcher
+    )
+
+    $searcher.Filter = "(&(objectCategory=computer)(name=$HostName))"  # Filter to search for a computer with the specified name
+	$Searcher.PropertiesToLoad.Clear()
+    $searcher.PropertiesToLoad.Add("operatingSystem") > $null # Only load the operatingSystem property
+
+    # Execute the search
+    $results = $searcher.FindOne()
+
+    # Check if results were returned and output the operatingSystem property
+    if ($results.Count -eq 0) {
+        return $null
+    } else {
+        Write-Output "$($results[0].Properties["operatingsystem"])"
+    }
 }
