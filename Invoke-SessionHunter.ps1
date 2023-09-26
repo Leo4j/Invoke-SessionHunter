@@ -415,10 +415,39 @@ function Invoke-SessionHunter {
 
  	if($TestAccess){
 	
+		# Define RunspacePool
+		$runspacePool = [runspacefactory]::CreateRunspacePool(1, [Environment]::ProcessorCount)
+		$runspacePool.Open()
+
+		$runspaces = @()
+
 		foreach ($result in $allResults) {
-		    $targetsresult = $result.HostName + '.' + $result.Domain
-		    $result.Access = Test-Access -Target $targetsresult
+			$target = "$($result.HostName).$($result.Domain)"
+			
+			$powershell = [powershell]::Create().AddScript({
+				$Error.Clear()
+				ls "\\$args\c$" > $null
+				return ($error[0] -eq $null)
+			}).AddArgument($target)
+
+			$powershell.RunspacePool = $runspacePool
+
+			$runspaces += [PSCustomObject]@{
+				PowerShell = $powershell
+				Status = $powershell.BeginInvoke()
+				Result = $result
+			}
 		}
+
+		# Wait and collect results
+		foreach ($runspace in $runspaces) {
+			$runspace.Result.Access = [bool]($runspace.PowerShell.EndInvoke($runspace.Status))
+			$runspace.PowerShell.Dispose()
+		}
+
+		$runspacePool.Close()
+		$runspacePool.Dispose()
+
   	}
 	
 	if($AdmCount){
@@ -497,20 +526,6 @@ function Invoke-SessionHunter {
 			}
 		}
 	}
-}
-
-function Test-Access {
-	param (
-		[string]$Target
-    )
-	
-	$Error.Clear()
-	
-	ls \\$Target\c$ > $null
-	
-	$ourerror = $error[0]
-	
-	return ($error[0] -eq $null)
 }
 
 function AdminCount {
