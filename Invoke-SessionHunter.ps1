@@ -365,9 +365,6 @@ function Invoke-SessionHunter {
 						OperatingSystem  = $operatingSystem
 						Access           = $null
 						UserSession      = $userTranslation
-						DA               = "NO"
-						EA               = "NO"
-						Adm              = "NO"
 						AdmCount         = "NO"
 					}
 				} catch {
@@ -387,9 +384,6 @@ function Invoke-SessionHunter {
 						OperatingSystem  = $operatingSystem
 						Access           = $null
 						UserSession      = $usersam
-						DA               = "NO"
-						EA               = "NO"
-						Adm              = "NO"
 						AdmCount         = "NO"
 					}
 				}
@@ -411,13 +405,6 @@ function Invoke-SessionHunter {
 		$runspace.Pipe.Dispose()
 	}
 	
-	# Define the LDAP connection
-	$TDOSourceDomainName = "DC=" + $currentDomain.Split(".")
-	$TDOSourceDomainName = $TDOSourceDomainName -replace " ", ",DC="
-	$ldapPath = "LDAP://$TDOSourceDomainName"
-	$searcher = New-Object System.DirectoryServices.DirectorySearcher([ADSI]$ldapPath)
-	$searcher.PageSize = 1000
-	
 	foreach($result in $allResults){
 		$targetsresult = $result.HostName + '.' + $result.Domain
 		$result.Access = Test-Access -Target $targetsresult
@@ -425,31 +412,20 @@ function Invoke-SessionHunter {
 		$username = ($result.UserSession -split '\\')[1]
 		$tempdomain = ($result.UserSession -split '\\')[0]
 		$result.AdmCount = AdminCount -UserName $username -Domain $tempdomain
-		$searcher.Filter = "(sAMAccountName=$username)"
-		$user = $searcher.FindOne()
-		$userDN = $user.Properties.distinguishedname[0]
-		$userGroups = Get-GroupsRecursively -distinguishedName $userDN -domain $tempdomain
-
-		foreach ($groupName in $userGroups) {
-			if($groupName -like "*Domain Admins*"){$result.DA = "YES"}
-			if($groupName -like "*Enterprise Admins*"){$result.EA = "YES"}
-			if($groupName -like "*Administrators*"){$result.Adm = "YES"}
-		}
-		
 	}
 
  	# Show Results
 	if($RawResults){
 		if($Hunt){
-			$allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, DA, EA, Adm, AdmCount
+			$allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount
 		}
-		else{$allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, DA, EA, Adm, AdmCount}
+		else{$allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount}
 	}
 	else{
 		if($Hunt){
-			$allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, DA, EA, Adm, AdmCount | Format-Table -AutoSize
+			$allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount | Format-Table -AutoSize
 		}
-		else{$allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, DA, EA, Adm, AdmCount | Format-Table -AutoSize}
+		else{$allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount | Format-Table -AutoSize}
 	}
 }
 
@@ -465,28 +441,6 @@ function Test-Access {
 	$ourerror = $error[0]
 	
 	return ($error[0] -eq $null)
-}
-
-function Get-GroupsRecursively {
-    param (
-        [string]$distinguishedName,
-        [string]$domain
-    )
-
-    $ldapPath = "LDAP://$domain"
-    $directoryEntry = New-Object System.DirectoryServices.DirectoryEntry $ldapPath
-    $searcher = New-Object System.DirectoryServices.DirectorySearcher $directoryEntry
-
-    $searcher.Filter = "(member=$distinguishedName)"
-    $searcher.PropertiesToLoad.Add("distinguishedName") > $null
-    $groups = $searcher.FindAll()
-
-    $groupList = @()
-    foreach ($group in $groups) {
-        $groupList += $group.Properties.distinguishedname[0]
-        $groupList += Get-GroupsRecursively -distinguishedName $group.Properties.distinguishedname[0] -domain $domain
-    }
-    return $groupList
 }
 
 function AdminCount {
