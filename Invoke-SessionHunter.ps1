@@ -279,7 +279,7 @@ function Invoke-SessionHunter {
 		$Tasks = $Computers | % {
 			Write-Progress -Activity "Scanning Ports" -Status "$count out of $total hosts scanned" -PercentComplete ($count / $total * 100)
 			$tcpClient = New-Object System.Net.Sockets.TcpClient
-			$asyncResult = $tcpClient.BeginConnect($_, 445, $null, $null)
+			$asyncResult = $tcpClient.BeginConnect($_, 135, $null, $null)
 			$wait = $asyncResult.AsyncWaitHandle.WaitOne($Timeout)
 			if($wait) {
    				try{
