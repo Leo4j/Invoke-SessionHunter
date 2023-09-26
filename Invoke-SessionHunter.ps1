@@ -465,17 +465,47 @@ function Invoke-SessionHunter {
 }
 
 function Test-Access {
-	param (
-		[string]$Target
+    param (
+        [string]$Target
     )
-	
-	$Error.Clear()
-	
-	ls \\$Target\c$ -ErrorAction SilentlyContinue > $null
-	
-	$ourerror = $error[0]
-	
-	return ($error[0] -eq $null)
+
+    $scriptblock = {
+        $Error.Clear()
+        ls "\\$args\c$" > $null
+        $ourerror = $error[0]
+        
+        if ($ourerror -eq $null) {
+            return $True
+        } else {
+            return $False
+        }
+    }
+
+    # Create a new runspace
+    $runspace = [runspacefactory]::CreateRunspace()
+    $runspace.Open()
+
+    # Run scriptblock in runspace
+    $pipeline = [powershell]::Create().AddScript($scriptblock).AddArgument($Target)
+    $pipeline.Runspace = $runspace
+    $asyncResult = $pipeline.BeginInvoke()
+
+    # Wait for 50ms and check for completion
+    Start-Sleep -Milliseconds 50
+    if ($asyncResult.IsCompleted) {
+        $result = $pipeline.EndInvoke($asyncResult)
+    } else {
+        # Stop the pipeline if it's still running after the timeout
+        $pipeline.Stop()
+        $result = $False
+    }
+
+    # Clean up the runspace
+    $pipeline.Dispose()
+    $runspace.Close()
+    $runspace.Dispose()
+
+    return $result
 }
 
 function AdminCount {
