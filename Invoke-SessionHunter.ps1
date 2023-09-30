@@ -242,11 +242,21 @@ function Invoke-SessionHunter {
 			$remoteRegistry = $null
 			$user = $null
 			$userTranslation = $null
-
-			$results = @()
+   			$AdminStatus = $False
+      			$SessionsAsAdmin = $null
+	 		$SessionsAsAdmin = @()
+    			$TempHostname = $Computer -replace '\..*', ''
 
 			# Gather computer information
 			$ipAddress = Resolve-DnsName $Computer | Where-Object { $_.Type -eq "A" } | Select-Object -ExpandProperty IPAddress
+
+   			# Check Admin Access (and Sessions)
+      			$Error.Clear()
+	 		$CheckSessionsAsAdmin = wmic /node:$Computer ComputerSystem Get UserName 2>&1
+    			if($error[0] -eq $null){
+       				$AdminStatus = $True
+       				$SessionsAsAdmin += $CheckSessionsAsAdmin | Where-Object {$_ -like "*\*" -AND $_ -notlike "*$TempHostname*"}
+	   		}
 
 			# Open the remote base key
 			try {
@@ -288,10 +298,10 @@ function Invoke-SessionHunter {
 
 					$results += [PSCustomObject]@{
 						Domain           = $currentDomain
-						HostName         = $Computer.Replace(".$currentDomain", "")
+						HostName         = $TempHostname
 						IPAddress        = $ipAddress
 						OperatingSystem  = $null
-						Access           = $null
+						Access           = $AdminStatus
 						UserSession      = $userTranslation
 						AdmCount         = "NO"
 					}
@@ -307,15 +317,29 @@ function Invoke-SessionHunter {
 
 					$results += [PSCustomObject]@{
 						Domain           = $currentDomain
-						HostName         = $Computer.Replace(".$currentDomain", "")
+						HostName         = $TempHostname
 						IPAddress        = $ipAddress
 						OperatingSystem  = $null
-						Access           = $null
+						Access           = $AdminStatus
 						UserSession      = $usersam
 						AdmCount         = "NO"
 					}
 				}
 			}
+
+   			foreach($Session in $SessionsAsAdmin){
+      				$results += [PSCustomObject]@{
+	  				Domain           = $currentDomain
+					HostName         = $TempHostname
+					IPAddress        = $ipAddress
+					OperatingSystem  = $null
+					Access           = $AdminStatus
+					UserSession      = $Session
+					AdmCount         = "NO"
+				}
+			}
+
+   			$results = $results | Sort-Object HostName, UserSession | Select-Object -Unique HostName, UserSession, Domain, IPAddress, OperatingSystem, Access, AdmCount
 
 			# Returning the results
 			return $results
@@ -332,40 +356,6 @@ function Invoke-SessionHunter {
 		$allResults += $runspace.Pipe.EndInvoke($runspace.Status)
 		$runspace.Pipe.Dispose()
 	}
-
-	# Define RunspacePool
-	$runspacePool = [runspacefactory]::CreateRunspacePool(1, [Environment]::ProcessorCount)
-	$runspacePool.Open()
-
-	$runspaces = @()
-
-	foreach ($result in $allResults) {
-		$target = "$($result.HostName).$($result.Domain)"
-		
-		$powershell = [powershell]::Create().AddScript({
-			$Error.Clear()
-			Get-WmiObject -Class Win32_OperatingSystem -ComputerName $args > $null
-			#ls "\\$args\c$" > $null
-			return ($error[0] -eq $null)
-		}).AddArgument($target)
-
-		$powershell.RunspacePool = $runspacePool
-
-		$runspaces += [PSCustomObject]@{
-			PowerShell = $powershell
-			Status = $powershell.BeginInvoke()
-			Result = $result
-		}
-	}
-
-	# Wait and collect results
-	foreach ($runspace in $runspaces) {
-		$runspace.Result.Access = [bool]($runspace.PowerShell.EndInvoke($runspace.Status))
-		$runspace.PowerShell.Dispose()
-	}
-
-	$runspacePool.Close()
-	$runspacePool.Dispose()
 	
 	foreach ($result in $allResults) {
 		$username = ($result.UserSession -split '\\')[1]
