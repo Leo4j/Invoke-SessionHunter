@@ -340,7 +340,7 @@ function Invoke-SessionHunter {
 				}
    			}
 
-   			$results = $results | Sort-Object HostName, UserSession | Select-Object -Unique HostName, UserSession, Domain, IPAddress, OperatingSystem, Access, AdmCount
+   			$results = $results | Sort-Object -Unique HostName, UserSession
 
 			# Returning the results
 			return $results
