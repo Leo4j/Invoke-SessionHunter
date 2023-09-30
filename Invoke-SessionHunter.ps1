@@ -370,16 +370,35 @@ function Invoke-SessionHunter {
 
 	if($RawResults){
 		if($Hunt){
-			$allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount
+			$FinalResults = $allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount
+   			$FinalResults
 		}
-		else{$allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount}
+		else{
+  			$FinalResults = $allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount
+     			$FinalResults
+     		}
 	}
 	else{
 		if($Hunt){
-			$allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount | Format-Table -AutoSize
+			$FinalResults = $allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount | Format-Table -AutoSize
+   			$FinalResults
 		}
-		else{$allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount | Format-Table -AutoSize}
+		else{
+  			$FinalResults = $allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount | Format-Table -AutoSize
+     			$FinalResults
+     		}
 	}
+
+ 	try{
+  		$FinalResults | Out-File $pwd\SessionHunter.txt -Force
+    		Write-Output "[+] Output saved to: $pwd\SessionHunter.txt"
+		Write-Output ""
+    	}
+  	catch{
+   		$FinalResults | Out-File c:\Users\Public\Document\SessionHunter.txt -Force
+     		Write-Output "[+] Output saved to: c:\Users\Public\Document\SessionHunter.txt"
+		Write-Output ""
+     	}
 	
 }
 
