@@ -131,78 +131,55 @@ function Invoke-SessionHunter {
 	
 	if($TargetsFile){
 		$Computers = Get-Content -Path $TargetsFile
-		$Computers = $Computers | ForEach-Object { $_ -replace '\..*', '' }
 		$Computers = $Computers | Sort-Object -Unique
 	}
 	
 	elseif($Targets){
   		$Computers = $Targets
   		$Computers = $Computers -split ","
-		$Computers = $Computers | ForEach-Object { $_ -replace '\..*', '' }
 		$Computers = $Computers | Sort-Object -Unique
 	}
 	
 	elseif($Servers){
-		$ldapFilter = "(&(objectCategory=computer)(operatingSystem=*server*))"
+		$ldapFilter = "(&(objectCategory=computer)(operatingSystem=*server*)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))"
 		$searcher.Filter = $ldapFilter
 		$allservers = $searcher.FindAll()
 		
 		$Computers = $null
 		$Computers = @()
 		foreach ($server in $allservers) {
-			$hostname = $server.Properties["name"][0]
+			$hostname = $server.Properties["dnshostname"][0]
 			$Computers += $hostname
 		}
 		$Computers = $Computers | Sort-Object
 	}
 
 	elseif($Workstations){
-		$ldapFilter = "(&(objectCategory=computer)(!(operatingSystem=*server*)))"
+		$ldapFilter = "(&(objectCategory=computer)(!(operatingSystem=*server*))(!(userAccountControl:1.2.840.113556.1.4.803:=2)))"
 		$searcher.Filter = $ldapFilter
 		$allworkstations = $searcher.FindAll()
 		
 		$Computers = $null
 		$Computers = @()
 		foreach ($workstation in $allworkstations) {
-			$hostname = $workstation.Properties["name"][0]
+			$hostname = $workstation.Properties["dnshostname"][0]
 			$Computers += $hostname
 		}
 		$Computers = $Computers | Sort-Object
 	}
 	
 	else{
-		$ldapFilter = "(objectCategory=computer)"
+		$ldapFilter = "(&(objectCategory=computer)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))"
 		$searcher.Filter = $ldapFilter
 		$allcomputers = $searcher.FindAll()
 		
 		$Computers = $null
 		$Computers = @()
 		foreach ($computer in $allcomputers) {
-			$hostname = $computer.Properties["name"][0]
+			$hostname = $computer.Properties["dnshostname"][0]
 			$Computers += $hostname
 		}
 		$Computers = $Computers | Sort-Object
-	}
-	
-	if($Domain){
-		$ComputersFQDN = $Computers | ForEach-Object {
-			if (-Not $_.EndsWith($Domain)) {
-				"$_.$Domain"
-			} else {
-				$_
-			}
-		}
-		$Computers = $ComputersFQDN
-	}
-	else{
-		$ComputersFQDN = $Computers | ForEach-Object {
-			if (-Not $_.EndsWith($currentDomain)) {
-				"$_.$currentDomain"
-			} else {
-				$_
-			}
-		}
-		$Computers = $ComputersFQDN
 	}
 	
 	if($ExcludeLocalHost){
