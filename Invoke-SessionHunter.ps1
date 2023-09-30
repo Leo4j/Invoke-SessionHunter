@@ -223,10 +223,6 @@ function Invoke-SessionHunter {
 
  	}
 	
-	if(!$Domain){
-		$Computers = $Computers | ForEach-Object { $_ -replace '\..*', '' }
-	}
-	
 	# Create a runspace pool
 	$runspacePool = [runspacefactory]::CreateRunspacePool(1, [Environment]::ProcessorCount)
 	$runspacePool.Open()
