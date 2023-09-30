@@ -326,18 +326,19 @@ function Invoke-SessionHunter {
 					}
 				}
 			}
-
-   			foreach($Session in $SessionsAsAdmin){
-      				$results += [PSCustomObject]@{
-	  				Domain           = $currentDomain
-					HostName         = $TempHostname
-					IPAddress        = $ipAddress
-					OperatingSystem  = $null
-					Access           = $AdminStatus
-					UserSession      = $Session
-					AdmCount         = "NO"
+			if($SessionsAsAdmin){
+	   			foreach($Session in $SessionsAsAdmin){
+	      				$results += [PSCustomObject]@{
+		  				Domain           = $currentDomain
+						HostName         = $TempHostname
+						IPAddress        = $ipAddress
+						OperatingSystem  = $null
+						Access           = $AdminStatus
+						UserSession      = $Session
+						AdmCount         = "NO"
+					}
 				}
-			}
+   			}
 
    			$results = $results | Sort-Object HostName, UserSession | Select-Object -Unique HostName, UserSession, Domain, IPAddress, OperatingSystem, Access, AdmCount
 
