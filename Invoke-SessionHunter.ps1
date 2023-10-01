@@ -252,98 +252,111 @@ function Invoke-SessionHunter {
 
    			# Check Admin Access (and Sessions)
       			$Error.Clear()
-	 		$CheckSessionsAsAdmin = wmic /node:$Computer ComputerSystem Get UserName 2>&1
+	 		if($UserName -AND $Password){$CheckSessionsAsAdmin = Invoke-WMIRemoting -ComputerName $Computer -UserName $UserName -Password $Password -Command "klist sessions"}
+			else{$CheckSessionsAsAdmin = Invoke-WMIRemoting -ComputerName $Computer -Command "klist sessions"}
     			if($error[0] -eq $null){
        				$AdminStatus = $True
        				$SessionsAsAdmin += $CheckSessionsAsAdmin | Where-Object {$_ -like "*\*" -AND $_ -notlike "*$TempHostname*"}
+	   			$pattern = '\s([\w\s-]+\\[\w\s-]+\S*)\s'
+				$matches = $content | ForEach-Object {
+				    if ($_ -match $pattern) {
+				        $matches[1]
+				    }
+				}
+				
+				# Output the matches
+				$matches
 	   		}
 
-			# Open the remote base key
-			try {
-				$remoteRegistry = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('Users', $Computer)
-			} catch {
-				if ($ConnectionErrors) {
-					Write-Host ""
-					Write-Host "Failed to connect to computer: $Computer"
-				}
-				continue
-			}
+      			else{
 
-			# Get the subkeys under HKEY_USERS
-			$userKeys = $remoteRegistry.GetSubKeyNames()
-
-			# Initialize an array to store the user SIDs
-			$userSIDs = @()
-
-			foreach ($key in $userKeys) {
-				# Skip common keys that are not user SIDs
-				if ($key -match '^[Ss]-\d-\d+-(\d+-){1,14}\d+$') {
-					$userSIDs += $key
-				}
-			}
-
-			# Close the remote registry key
-			$remoteRegistry.Close()
-
-			$results = @()
-
-			# Resolve the SIDs to usernames
-			foreach ($sid in $userSIDs) {
-				$user = $null
-				$userTranslation = $null
-
+				# Open the remote base key
 				try {
-					$user = New-Object System.Security.Principal.SecurityIdentifier($sid)
-					$userTranslation = $user.Translate([System.Security.Principal.NTAccount])
-
-					$results += [PSCustomObject]@{
-						Domain           = $currentDomain
-						HostName         = $TempHostname
-						IPAddress        = $ipAddress
-						OperatingSystem  = $null
-						Access           = $AdminStatus
-						UserSession      = $userTranslation
-						AdmCount         = "NO"
-					}
+					$remoteRegistry = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('Users', $Computer)
 				} catch {
-					$searcher.Filter = "(objectSid=$sid)"
-					$userTranslation = $searcher.FindOne()
-					$user = $userTranslation.GetDirectoryEntry()
-					$usersam = $user.Properties["samAccountName"].Value
-					$netdomain = ([ADSI]"LDAP://$currentDomain").dc -Join " - "
-					if ($usersam -notcontains '\') {
-						$usersam = "$netdomain\" + $usersam
+					if ($ConnectionErrors) {
+						Write-Host ""
+						Write-Host "Failed to connect to computer: $Computer"
 					}
-
-					$results += [PSCustomObject]@{
-						Domain           = $currentDomain
-						HostName         = $TempHostname
-						IPAddress        = $ipAddress
-						OperatingSystem  = $null
-						Access           = $AdminStatus
-						UserSession      = $usersam
-						AdmCount         = "NO"
+					continue
+				}
+	
+				# Get the subkeys under HKEY_USERS
+				$userKeys = $remoteRegistry.GetSubKeyNames()
+	
+				# Initialize an array to store the user SIDs
+				$userSIDs = @()
+	
+				foreach ($key in $userKeys) {
+					# Skip common keys that are not user SIDs
+					if ($key -match '^[Ss]-\d-\d+-(\d+-){1,14}\d+$') {
+						$userSIDs += $key
 					}
 				}
-			}
-			if($SessionsAsAdmin){
-	   			foreach($Session in $SessionsAsAdmin){
-	      				$results += [PSCustomObject]@{
-		  				Domain           = $currentDomain
-						HostName         = $TempHostname
-						IPAddress        = $ipAddress
-						OperatingSystem  = $null
-						Access           = $AdminStatus
-						UserSession      = $Session
-						AdmCount         = "NO"
+	
+				# Close the remote registry key
+				$remoteRegistry.Close()
+	
+				$results = @()
+	
+				# Resolve the SIDs to usernames
+				foreach ($sid in $userSIDs) {
+					$user = $null
+					$userTranslation = $null
+	
+					try {
+						$user = New-Object System.Security.Principal.SecurityIdentifier($sid)
+						$userTranslation = $user.Translate([System.Security.Principal.NTAccount])
+	
+						$results += [PSCustomObject]@{
+							Domain           = $currentDomain
+							HostName         = $TempHostname
+							IPAddress        = $ipAddress
+							OperatingSystem  = $null
+							Access           = $AdminStatus
+							UserSession      = $userTranslation
+							AdmCount         = "NO"
+						}
+					} catch {
+						$searcher.Filter = "(objectSid=$sid)"
+						$userTranslation = $searcher.FindOne()
+						$user = $userTranslation.GetDirectoryEntry()
+						$usersam = $user.Properties["samAccountName"].Value
+						$netdomain = ([ADSI]"LDAP://$currentDomain").dc -Join " - "
+						if ($usersam -notcontains '\') {
+							$usersam = "$netdomain\" + $usersam
+						}
+	
+						$results += [PSCustomObject]@{
+							Domain           = $currentDomain
+							HostName         = $TempHostname
+							IPAddress        = $ipAddress
+							OperatingSystem  = $null
+							Access           = $AdminStatus
+							UserSession      = $usersam
+							AdmCount         = "NO"
+						}
 					}
 				}
-   			}
-
-   			$results = $results | Sort-Object -Unique HostName, UserSession
-
-			# Returning the results
-			return $results
+				if($SessionsAsAdmin){
+		   			foreach($Session in $SessionsAsAdmin){
+		      				$results += [PSCustomObject]@{
+			  				Domain           = $currentDomain
+							HostName         = $TempHostname
+							IPAddress        = $ipAddress
+							OperatingSystem  = $null
+							Access           = $AdminStatus
+							UserSession      = $Session
+							AdmCount         = "NO"
+						}
+					}
+	   			}
+	
+	   			$results = $results | Sort-Object -Unique HostName, UserSession
+	
+				# Returning the results
+				return $results
+    			}
 		}
 
 		$runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($Computer).AddArgument($currentDomain).AddArgument($ConnectionErrors).AddArgument($searcher)
