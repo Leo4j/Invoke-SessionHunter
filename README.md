@@ -17,7 +17,9 @@ If run without parameters or switches it will retrieve active sessions for all c
 Invoke-SessionHunter
 ```
 
-![image](https://github.com/Leo4j/Invoke-SessionHunter/assets/61951374/ade5b58f-83fa-45b8-ad27-c7e3b20867c8)
+![image](https://github.com/Leo4j/Invoke-SessionHunter/assets/61951374/c0fc2b1e-6edb-42f4-b9a6-d5864115e35f)
+
+
 
 ### Specify the target domain
 
