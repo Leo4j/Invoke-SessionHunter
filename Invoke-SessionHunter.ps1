@@ -571,7 +571,7 @@ function Invoke-WMIRemoting {
 
         if ($startProcess.ReturnValue -eq 0) {
 			$elapsedTime = 0
-			$timeout = 60
+			$timeout = 5
 			do {
 				Start-Sleep -Seconds 1
 				$elapsedTime++
