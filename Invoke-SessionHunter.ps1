@@ -10,8 +10,9 @@ function Invoke-SessionHunter {
 	Retrieve and display information about active user sessions on remote computers.
 	Admin privileges on the remote systems are not required.
 	If run without parameters or switches it will retrieve active sessions for all computers in the current domain.
-	The tool leverages the remote registry service to query the HKEY_USERS registry hive on the remote computers.
-	It identifies and extracts Security Identifiers (SIDs) associated with active user sessions,
+ 	Initially, the tool will check if we have admin access to the target. If we do, it will dump sessions informations.
+	If we have no admin access to the target, the tool will leverage the remote registry service to query the HKEY_USERS registry hive.
+	It then identifies and extracts Security Identifiers (SIDs) associated with active user sessions,
 	and translates these into corresponding usernames, offering insights into who is currently logged in.
 	It's important to note that the remote registry service needs to be running on the remote computer for the tool to work effectively.
 	In my tests, if the service is stopped but its Startup type is configured to "Automatic" or "Manual",
@@ -41,6 +42,12 @@ function Invoke-SessionHunter {
 	
 	.PARAMETER ExcludeLocalHost
 	Exclude localhost from the sessions retrieval
+
+ 	.PARAMETER UserName
+	Check sessions authenticating to targets as the specified UserName
+
+ 	.PARAMETER Password
+	Provide password for the specified UserName
 	
 	.PARAMETER RawResults
 	Return custom PSObjects instead of table-formatted results
@@ -50,6 +57,9 @@ function Invoke-SessionHunter {
 
  	.PARAMETER NoPortScan
 	Do not run a port scan to enumerate for alive hosts before trying to retrieve sessions
+
+ 	.PARAMETER Match
+  	Show only hosts where we are admin, and where a session for a user with admin count set to 1 exists
 
 	.EXAMPLE
 	Invoke-SessionHunter
@@ -114,7 +124,7 @@ function Invoke-SessionHunter {
 		[Switch]
 		$NoPortScan,
 		
-		[Parameter (Mandatory=$False, Position = 12, ValueFromPipeline=$true)]
+		[Parameter (Mandatory=$False, Position = 13, ValueFromPipeline=$true)]
 		[Switch]
 		$Match
 	
@@ -220,11 +230,10 @@ function Invoke-SessionHunter {
 			$wait = $asyncResult.AsyncWaitHandle.WaitOne($Timeout)
 			if($wait) {
    				try{
-					$tcpClient.EndConnect($asyncResult)
-					$connected = $true
-					$reachable_hosts += $_
-    				} catch{$connected = $false}
-			} else {$connected = $false}
+				$tcpClient.EndConnect($asyncResult)
+				$reachable_hosts += $_
+    				} catch{}
+			}
    			$tcpClient.Close()
 			$count++
 		}
@@ -257,14 +266,14 @@ function Invoke-SessionHunter {
 			$user = $null
 			$userTranslation = $null
    			$AdminStatus = $False
-    		$TempHostname = $Computer -replace '\..*', ''
+    			$TempHostname = $Computer -replace '\..*', ''
 			$TempCurrentUser = $env:username
 
 			# Gather computer information
 			$ipAddress = Resolve-DnsName $Computer | Where-Object { $_.Type -eq "A" } | Select-Object -ExpandProperty IPAddress
 
    			# Check Admin Access (and Sessions)
-      		$Error.Clear()
+      			$Error.Clear()
 			if($UserName -AND $Password){
 				$SecPassword = ConvertTo-SecureString $Password -AsPlainText -Force
 				$cred = New-Object System.Management.Automation.PSCredential($UserName,$SecPassword)
@@ -309,7 +318,7 @@ function Invoke-SessionHunter {
 				$results = @()
 				
 				foreach($entry in $filtered){
-						$results += [PSCustomObject]@{
+					$results += [PSCustomObject]@{
 						Domain           = $currentDomain
 						HostName         = $TempHostname
 						IPAddress        = $ipAddress
@@ -557,7 +566,7 @@ function Invoke-WMIRemoting {
         $createNewClass.Properties.Add($KeyID, [System.Management.CimType]::String, $false)
         $createNewClass.Properties[$KeyID].Qualifiers.Add("Key", $true)
         $createNewClass.Properties.Add("OutputData", [System.Management.CimType]::String, $false)
-		$createNewClass.Properties.Add("CommandStatus", [System.Management.CimType]::String, $false)
+	$createNewClass.Properties.Add("CommandStatus", [System.Management.CimType]::String, $false)
         $createNewClass.Put() | Out-Null
     }
     $wmiData = Set-WmiInstance -Class $ClassID -ComputerName $ComputerName
@@ -567,39 +576,37 @@ function Invoke-WMIRemoting {
 
     $RunCmd = {
         param ([string]$CmdInput)
-		$resultData = $null
-		$wmiDataOutput = $null
+	$resultData = $null
+	$wmiDataOutput = $null
         $base64Input = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($CmdInput))
         $commandStr = "powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Unrestricted -WindowStyle Hidden -EncodedCommand $base64Input"
         $finalCommand = "`$outputData = &$commandStr | Out-String; Get-WmiObject -Class $ClassID -Filter `"$KeyID = '$GuidOutput'`" | Set-WmiInstance -Arguments `@{OutputData = `$outputData; CommandStatus='Completed'} | Out-Null"
         $finalCommandBase64 = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($finalCommand))
         if($cred){$startProcess = Invoke-WmiMethod -ComputerName $ComputerName -Class Win32_Process -Name Create -Credential $cred -ArgumentList ("powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Unrestricted -WindowStyle Hidden -EncodedCommand " + $finalCommandBase64)}
-		else{$startProcess = Invoke-WmiMethod -ComputerName $ComputerName -Class Win32_Process -Name Create -ArgumentList ("powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Unrestricted -WindowStyle Hidden -EncodedCommand " + $finalCommandBase64)}
+	else{$startProcess = Invoke-WmiMethod -ComputerName $ComputerName -Class Win32_Process -Name Create -ArgumentList ("powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Unrestricted -WindowStyle Hidden -EncodedCommand " + $finalCommandBase64)}
 
         if ($startProcess.ReturnValue -eq 0) {
-			$elapsedTime = 0
-			$timeout = 5
-			do {
-				Start-Sleep -Seconds 1
-				$elapsedTime++
-				if($cred){$wmiDataOutput = Get-WmiObject -Class $ClassID -ComputerName $ComputerName -Credential $cred -Filter "$KeyID = '$GuidOutput'"}
-				else{$wmiDataOutput = Get-WmiObject -Class $ClassID -ComputerName $ComputerName -Filter "$KeyID = '$GuidOutput'"}
-				if ($wmiDataOutput.CommandStatus -eq "Completed") {
-					break
-				}
-			} while ($elapsedTime -lt $timeout)
-            $resultData = $wmiDataOutput.OutputData
-			$wmiDataOutput.CommandStatus = "NotStarted"
-			$wmiDataOutput.Put() | Out-Null
-            $wmiDataOutput.Dispose()
-            return $resultData
+		$elapsedTime = 0
+		$timeout = 5
+		do {
+			Start-Sleep -Seconds 1
+			$elapsedTime++
+			if($cred){$wmiDataOutput = Get-WmiObject -Class $ClassID -ComputerName $ComputerName -Credential $cred -Filter "$KeyID = '$GuidOutput'"}
+			else{$wmiDataOutput = Get-WmiObject -Class $ClassID -ComputerName $ComputerName -Filter "$KeyID = '$GuidOutput'"}
+			if ($wmiDataOutput.CommandStatus -eq "Completed") {break}
+		} while ($elapsedTime -lt $timeout)
+            	$resultData = $wmiDataOutput.OutputData
+		$wmiDataOutput.CommandStatus = "NotStarted"
+		$wmiDataOutput.Put() | Out-Null
+		$wmiDataOutput.Dispose()
+		return $resultData
         } else {
             throw "Failed to run command on $ComputerName."
         }
     }
         
-	$finalResult = & $RunCmd -CmdInput $Command
-	Write-Output $finalResult
+    $finalResult = & $RunCmd -CmdInput $Command
+    Write-Output $finalResult
 	
     ([wmiclass]"\\$ComputerName\ROOT\CIMV2:$ClassID").Delete()
 }
