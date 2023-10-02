@@ -258,6 +258,7 @@ function Invoke-SessionHunter {
 			$userTranslation = $null
    			$AdminStatus = $False
     		$TempHostname = $Computer -replace '\..*', ''
+			$TempCurrentUser = $env:username
 
 			# Gather computer information
 			$ipAddress = Resolve-DnsName $Computer | Where-Object { $_.Type -eq "A" } | Select-Object -ExpandProperty IPAddress
@@ -287,11 +288,20 @@ function Invoke-SessionHunter {
 						$matches[1]
 					} else {$matches = $null}
 				}
-
-				$filtered = $matches | Where-Object {
-					# Split the entry based on "\"
-					$splitEntry = $_ -split '\\'
-					($splitEntry[0] -notlike "* *") -and ($splitEntry[0] -ne $TempHostname)
+				
+				if($UserName -AND $Password){
+					$filtered = $matches | Where-Object {
+						# Split the entry based on "\"
+						$splitEntry = $_ -split '\\'
+						($splitEntry[0] -notlike "* *") -and ($splitEntry[0] -ne $TempHostname) -and ($splitEntry[1] -notlike "*$TempHostname*") -and ($splitEntry[1] -notlike "*$UserName*") -and ($splitEntry[1] -notlike "*$TempCurrentUser*")
+					}
+				}
+				else{
+					$filtered = $matches | Where-Object {
+						# Split the entry based on "\"
+						$splitEntry = $_ -split '\\'
+						($splitEntry[0] -notlike "* *") -and ($splitEntry[0] -ne $TempHostname) -and ($splitEntry[1] -notlike "*$TempHostname*") -and ($splitEntry[1] -notlike "*$TempCurrentUser*")
+					}
 				}
 
 				$results = @()
