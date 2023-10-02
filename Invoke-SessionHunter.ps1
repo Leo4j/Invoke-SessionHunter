@@ -112,7 +112,11 @@ function Invoke-SessionHunter {
 
   		[Parameter (Mandatory=$False, Position = 12, ValueFromPipeline=$true)]
 		[Switch]
-		$NoPortScan
+		$NoPortScan,
+		
+		[Parameter (Mandatory=$False, Position = 12, ValueFromPipeline=$true)]
+		[Switch]
+		$Match
 	
 	)
 	
@@ -238,51 +242,62 @@ function Invoke-SessionHunter {
 	# Create an array to hold the runspaces
 	$runspaces = @()
 
- 	$InvokeWMIRemoting = (New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/Leo4j/Invoke-WMIRemoting/main/Invoke-WMIRemoting.ps1')
+ 	#$InvokeWMIRemoting = (New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/Leo4j/Invoke-WMIRemoting/main/Invoke-WMIRemoting.ps1')
 
 	# Iterate through the computers, creating a runspace for each
 	foreach ($Computer in $Computers) {
 		# ScriptBlock that contains the processing code
 		$scriptBlock = {
-			param($Computer, $currentDomain, $ConnectionErrors, $searcher, $InvokeWMIRemoting)
+			param($Computer, $currentDomain, $ConnectionErrors, $searcher, $InvokeWMIRemoting, $UserName, $Password)
 
-   			. ([scriptblock]::Create($InvokeWMIRemoting))
-
-			# Clearing variables
+   			# Clearing variables
 			$userSIDs = $null
 			$userKeys = $null
 			$remoteRegistry = $null
 			$user = $null
 			$userTranslation = $null
    			$AdminStatus = $False
-    			$TempHostname = $Computer -replace '\..*', ''
+    		$TempHostname = $Computer -replace '\..*', ''
 
 			# Gather computer information
 			$ipAddress = Resolve-DnsName $Computer | Where-Object { $_.Type -eq "A" } | Select-Object -ExpandProperty IPAddress
 
    			# Check Admin Access (and Sessions)
-      			$Error.Clear()
-	 		if($UserName -AND $Password){$CheckSessionsAsAdmin = Invoke-WMIRemoting -ComputerName $Computer -UserName $UserName -Password $Password -Command "klist sessions"}
-			else{$CheckSessionsAsAdmin = Invoke-WMIRemoting -ComputerName $Computer -Command "klist sessions"}
-    			if($error[0] -eq $null){
-       				$AdminStatus = $True
-	   			$pattern = '\s([\w\s-]+\\[\w\s-]+\$?)\s'
+      		$Error.Clear()
+			if($UserName -AND $Password){
+				$SecPassword = ConvertTo-SecureString $Password -AsPlainText -Force
+				$cred = New-Object System.Management.Automation.PSCredential($UserName,$SecPassword)
+				Get-WmiObject -Class Win32_OperatingSystem -ComputerName $Computer -Credential $cred > $null
+			}
+			else{Get-WmiObject -Class Win32_OperatingSystem -ComputerName $Computer > $null}
+			if($error[0] -eq $null){
+				$AdminStatus = $True
+				. ([scriptblock]::Create($InvokeWMIRemoting))
+				if($UserName -AND $Password){$CheckSessionsAsAdmin = Invoke-WMIRemoting -ComputerName $Computer -UserName $UserName -Password $Password -Command "klist sessions"}
+				else{$CheckSessionsAsAdmin = Invoke-WMIRemoting -ComputerName $Computer -Command "klist sessions"}
+				
+				$CheckSessionsAsAdmin = ($CheckSessionsAsAdmin | Out-String) -split "`n"
+				$CheckSessionsAsAdmin = $CheckSessionsAsAdmin.Trim()
+				$CheckSessionsAsAdmin = $CheckSessionsAsAdmin | Where-Object { $_ -ne "" }
+				
+				$pattern = '\s([\w\s-]+\\[\w\s-]+\$?)\s'
+				
 				$matches = $CheckSessionsAsAdmin | ForEach-Object {
-				    if ($_ -match $pattern) {
-				        $matches[1]
-				    } else {$matches = $null}
+					if ($_ -match $pattern) {
+						$matches[1]
+					} else {$matches = $null}
 				}
 
-    				$filtered = $matches | Where-Object {
-				    # Split the entry based on "\"
-				    $splitEntry = $_ -split '\\'
-				    ($splitEntry[0] -notlike "* *") -and ($splitEntry[0] -ne $TempHostname)
+				$filtered = $matches | Where-Object {
+					# Split the entry based on "\"
+					$splitEntry = $_ -split '\\'
+					($splitEntry[0] -notlike "* *") -and ($splitEntry[0] -ne $TempHostname)
 				}
 
-    				$results = @()
+				$results = @()
 				
 				foreach($entry in $filtered){
-    					$results += [PSCustomObject]@{
+						$results += [PSCustomObject]@{
 						Domain           = $currentDomain
 						HostName         = $TempHostname
 						IPAddress        = $ipAddress
@@ -294,7 +309,7 @@ function Invoke-SessionHunter {
 				}
 	   		}
 
-      			else{
+			else{
 
 				# Open the remote base key
 				try {
@@ -364,28 +379,15 @@ function Invoke-SessionHunter {
 						}
 					}
 				}
-				if($SessionsAsAdmin){
-		   			foreach($Session in $SessionsAsAdmin){
-		      				$results += [PSCustomObject]@{
-			  				Domain           = $currentDomain
-							HostName         = $TempHostname
-							IPAddress        = $ipAddress
-							OperatingSystem  = $null
-							Access           = $AdminStatus
-							UserSession      = $Session
-							AdmCount         = "NO"
-						}
-					}
-	   			}
+			}
+			
+			$results = $results | Sort-Object -Unique HostName, UserSession
 	
-	   			$results = $results | Sort-Object -Unique HostName, UserSession
-	
-				# Returning the results
-				return $results
-    			}
+			# Returning the results
+			return $results
 		}
 
-		$runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($Computer).AddArgument($currentDomain).AddArgument($ConnectionErrors).AddArgument($searcher).AddArgument($InvokeWMIRemoting)
+		$runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($Computer).AddArgument($currentDomain).AddArgument($ConnectionErrors).AddArgument($searcher).AddArgument($InvokeWMIRemoting).AddArgument($UserName).AddArgument($Password)
 		$runspace.RunspacePool = $runspacePool
 		$runspaces += [PSCustomObject]@{ Pipe = $runspace; Status = $runspace.BeginInvoke() }
 	}
@@ -399,9 +401,9 @@ function Invoke-SessionHunter {
 	
 	foreach ($result in $allResults) {
 		$username = ($result.UserSession -split '\\')[1]
-		$tempdomain = ($result.UserSession -split '\\')[0]
 		$TargetHost = $result.HostName
-		$result.AdmCount = AdminCount -UserName $username -Searcher $searcher
+		if($username -like '*$'){$result.AdmCount = "N/A"}
+		else{$result.AdmCount = AdminCount -UserName $username -Searcher $searcher}
 		$result.OperatingSystem = Get-OS -HostName $TargetHost -Searcher $searcher
 	}
 	
@@ -409,35 +411,59 @@ function Invoke-SessionHunter {
 
 	if($RawResults){
 		if($Hunt){
-			$FinalResults = $allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount
-   			$FinalResults
+			if($Match){
+				$FinalResults = $allResults | Where-Object { $_.User -like "*$Hunt*" -AND $_.AdmCount -eq $True -AND $_.Access -eq $True} | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount
+				$FinalResults
+			}
+			else{
+				$FinalResults = $allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount
+				$FinalResults
+			}
 		}
 		else{
-  			$FinalResults = $allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount
-     			$FinalResults
-     		}
+			if($Match){
+				$FinalResults = $allResults | Where-Object {$_.AdmCount -eq $True -AND $_.Access -eq $True} | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount
+				$FinalResults
+			}
+			else{
+				$FinalResults = $allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount
+				$FinalResults
+			}
+     	}
 	}
 	else{
 		if($Hunt){
-			$FinalResults = $allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount | Format-Table -AutoSize
-   			$FinalResults
+			if($Match){
+				$FinalResults = $allResults | Where-Object { $_.User -like "*$Hunt*" -AND $_.AdmCount -eq $True -AND $_.Access -eq $True} | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount | Format-Table -AutoSize
+				$FinalResults
+			}
+			else{
+				$FinalResults = $allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount | Format-Table -AutoSize
+				$FinalResults
+			}
 		}
 		else{
-  			$FinalResults = $allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount | Format-Table -AutoSize
-     			$FinalResults
-     		}
+			if($Match){
+				$FinalResults = $allResults | Where-Object {$_.AdmCount -eq $True -AND $_.Access -eq $True} | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount | Format-Table -AutoSize
+				$FinalResults
+			}
+			else{
+				$FinalResults = $allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount | Format-Table -AutoSize
+				$FinalResults
+			}
+		}
 	}
 
  	try{
   		$FinalResults | Out-File $pwd\SessionHunter.txt -Force
-    		Write-Output "[+] Output saved to: $pwd\SessionHunter.txt"
+    	Write-Output "[+] Output saved to: $pwd\SessionHunter.txt"
 		Write-Output ""
-    	}
+    }
   	catch{
    		$FinalResults | Out-File c:\Users\Public\Document\SessionHunter.txt -Force
-     		Write-Output "[+] Output saved to: c:\Users\Public\Document\SessionHunter.txt"
+    	Write-Output "[+] Output saved to: c:\Users\Public\Document\SessionHunter.txt"
 		Write-Output ""
-     	}
+    }
 	
 }
 
@@ -482,3 +508,80 @@ function Get-OS {
         Write-Output "$($results[0].Properties["operatingsystem"])"
     }
 }
+
+$InvokeWMIRemoting = @'
+function Invoke-WMIRemoting {
+	
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$ComputerName,
+        [string]$Command,
+		[string]$UserName,
+		[string]$Password
+    )
+	
+	if($UserName -AND $Password){
+		$SecPassword = ConvertTo-SecureString $Password -AsPlainText -Force
+		$cred = New-Object System.Management.Automation.PSCredential($UserName,$SecPassword)
+	}
+
+    $ClassID = "Custom_WMI_" + (Get-Random)
+    $KeyID = "CmdGUID"
+	
+	if($UserName -AND $Password){
+		$classExists = Get-WmiObject -Class $ClassID -ComputerName $ComputerName -List -Namespace "root\cimv2" -Credential $cred
+	}else{$classExists = Get-WmiObject -Class $ClassID -ComputerName $ComputerName -List -Namespace "root\cimv2"}
+    
+	if (-not $classExists) {
+        $createNewClass = New-Object System.Management.ManagementClass("\\$ComputerName\root\cimv2", [string]::Empty, $null)
+        $createNewClass["__CLASS"] = $ClassID
+        $createNewClass.Properties.Add($KeyID, [System.Management.CimType]::String, $false)
+        $createNewClass.Properties[$KeyID].Qualifiers.Add("Key", $true)
+        $createNewClass.Properties.Add("OutputData", [System.Management.CimType]::String, $false)
+		$createNewClass.Properties.Add("CommandStatus", [System.Management.CimType]::String, $false)
+        $createNewClass.Put() | Out-Null
+    }
+    $wmiData = Set-WmiInstance -Class $ClassID -ComputerName $ComputerName
+    $wmiData.GetType() | Out-Null
+    $GuidOutput = ($wmiData | Select-Object -Property $KeyID -ExpandProperty $KeyID)
+    $wmiData.Dispose()
+
+    $RunCmd = {
+        param ([string]$CmdInput)
+		$resultData = $null
+		$wmiDataOutput = $null
+        $base64Input = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($CmdInput))
+        $commandStr = "powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Unrestricted -WindowStyle Hidden -EncodedCommand $base64Input"
+        $finalCommand = "`$outputData = &$commandStr | Out-String; Get-WmiObject -Class $ClassID -Filter `"$KeyID = '$GuidOutput'`" | Set-WmiInstance -Arguments `@{OutputData = `$outputData; CommandStatus='Completed'} | Out-Null"
+        $finalCommandBase64 = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($finalCommand))
+        if($cred){$startProcess = Invoke-WmiMethod -ComputerName $ComputerName -Class Win32_Process -Name Create -Credential $cred -ArgumentList ("powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Unrestricted -WindowStyle Hidden -EncodedCommand " + $finalCommandBase64)}
+		else{$startProcess = Invoke-WmiMethod -ComputerName $ComputerName -Class Win32_Process -Name Create -ArgumentList ("powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Unrestricted -WindowStyle Hidden -EncodedCommand " + $finalCommandBase64)}
+
+        if ($startProcess.ReturnValue -eq 0) {
+			$elapsedTime = 0
+			$timeout = 60
+			do {
+				Start-Sleep -Seconds 1
+				$elapsedTime++
+				if($cred){$wmiDataOutput = Get-WmiObject -Class $ClassID -ComputerName $ComputerName -Credential $cred -Filter "$KeyID = '$GuidOutput'"}
+				else{$wmiDataOutput = Get-WmiObject -Class $ClassID -ComputerName $ComputerName -Filter "$KeyID = '$GuidOutput'"}
+				if ($wmiDataOutput.CommandStatus -eq "Completed") {
+					break
+				}
+			} while ($elapsedTime -lt $timeout)
+            $resultData = $wmiDataOutput.OutputData
+			$wmiDataOutput.CommandStatus = "NotStarted"
+			$wmiDataOutput.Put() | Out-Null
+            $wmiDataOutput.Dispose()
+            return $resultData
+        } else {
+            throw "Failed to run command on $ComputerName."
+        }
+    }
+        
+	$finalResult = & $RunCmd -CmdInput $Command
+	Write-Output $finalResult
+	
+    ([wmiclass]"\\$ComputerName\ROOT\CIMV2:$ClassID").Delete()
+}
+'@
