@@ -243,8 +243,6 @@ function Invoke-SessionHunter {
 			$user = $null
 			$userTranslation = $null
    			$AdminStatus = $False
-      			$SessionsAsAdmin = $null
-	 		$SessionsAsAdmin = @()
     			$TempHostname = $Computer -replace '\..*', ''
 
 			# Gather computer information
@@ -256,16 +254,32 @@ function Invoke-SessionHunter {
 			else{$CheckSessionsAsAdmin = Invoke-WMIRemoting -ComputerName $Computer -Command "klist sessions"}
     			if($error[0] -eq $null){
        				$AdminStatus = $True
-       				$SessionsAsAdmin += $CheckSessionsAsAdmin | Where-Object {$_ -like "*\*" -AND $_ -notlike "*$TempHostname*"}
 	   			$pattern = '\s([\w\s-]+\\[\w\s-]+\$?)\s'
-				$matches = $SessionsAsAdmin | ForEach-Object {
+				$matches = $CheckSessionsAsAdmin | ForEach-Object {
 				    if ($_ -match $pattern) {
 				        $matches[1]
 				    } else {$matches = $null}
 				}
+
+    				$filtered = $matches | Where-Object {
+				    # Split the entry based on "\"
+				    $splitEntry = $_ -split '\\'
+				    ($splitEntry[0] -notlike "* *") -and ($splitEntry[0] -ne $TempHostname)
+				}
+
+    				$results = @()
 				
-				# Output the matches
-				$matches
+				foreach($entry in $filtered){
+    					$results += [PSCustomObject]@{
+						Domain           = $currentDomain
+						HostName         = $TempHostname
+						IPAddress        = $ipAddress
+						OperatingSystem  = $null
+						Access           = $AdminStatus
+						UserSession      = $entry
+						AdmCount         = "NO"
+					}
+				}
 	   		}
 
       			else{
