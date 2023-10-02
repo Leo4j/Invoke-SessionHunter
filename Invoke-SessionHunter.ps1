@@ -81,28 +81,36 @@ function Invoke-SessionHunter {
 		[Parameter (Mandatory=$False, Position = 4, ValueFromPipeline=$true)]
 		[String]
 		$Timeout,
-		
-		[Parameter (Mandatory=$False, Position = 5, ValueFromPipeline=$true)]
-		[Switch]
-		$Servers,
-		
-		[Parameter (Mandatory=$False, Position = 6, ValueFromPipeline=$true)]
-		[Switch]
-		$Workstations,
+
+  		[Parameter (Mandatory=$False, Position = 5, ValueFromPipeline=$true)]
+		[String]
+		$UserName,
+
+  		[Parameter (Mandatory=$False, Position = 6, ValueFromPipeline=$true)]
+		[String]
+		$Password,
 		
 		[Parameter (Mandatory=$False, Position = 7, ValueFromPipeline=$true)]
 		[Switch]
-		$RawResults,
+		$Servers,
 		
 		[Parameter (Mandatory=$False, Position = 8, ValueFromPipeline=$true)]
 		[Switch]
-		$ConnectionErrors,
+		$Workstations,
 		
 		[Parameter (Mandatory=$False, Position = 9, ValueFromPipeline=$true)]
 		[Switch]
+		$RawResults,
+		
+		[Parameter (Mandatory=$False, Position = 10, ValueFromPipeline=$true)]
+		[Switch]
+		$ConnectionErrors,
+		
+		[Parameter (Mandatory=$False, Position = 11, ValueFromPipeline=$true)]
+		[Switch]
 		$ExcludeLocalHost,
 
-  		[Parameter (Mandatory=$False, Position = 10, ValueFromPipeline=$true)]
+  		[Parameter (Mandatory=$False, Position = 12, ValueFromPipeline=$true)]
 		[Switch]
 		$NoPortScan
 	
@@ -230,11 +238,15 @@ function Invoke-SessionHunter {
 	# Create an array to hold the runspaces
 	$runspaces = @()
 
+ 	$InvokeWMIRemoting = (New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/Leo4j/Invoke-WMIRemoting/main/Invoke-WMIRemoting.ps1')
+
 	# Iterate through the computers, creating a runspace for each
 	foreach ($Computer in $Computers) {
 		# ScriptBlock that contains the processing code
 		$scriptBlock = {
-			param($Computer, $currentDomain, $ConnectionErrors, $searcher)
+			param($Computer, $currentDomain, $ConnectionErrors, $searcher, $InvokeWMIRemoting)
+
+   			. ([scriptblock]::Create($InvokeWMIRemoting))
 
 			# Clearing variables
 			$userSIDs = $null
@@ -373,7 +385,7 @@ function Invoke-SessionHunter {
     			}
 		}
 
-		$runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($Computer).AddArgument($currentDomain).AddArgument($ConnectionErrors).AddArgument($searcher)
+		$runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($Computer).AddArgument($currentDomain).AddArgument($ConnectionErrors).AddArgument($searcher).AddArgument($InvokeWMIRemoting)
 		$runspace.RunspacePool = $runspacePool
 		$runspaces += [PSCustomObject]@{ Pipe = $runspace; Status = $runspace.BeginInvoke() }
 	}
