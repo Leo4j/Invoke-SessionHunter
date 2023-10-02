@@ -290,10 +290,12 @@ function Invoke-SessionHunter {
 				}
 				
 				if($UserName -AND $Password){
+    					$UserNameDomainSplit = $UserName -split '\\'
+					$UserNameSplit = $UserNameDomainSplit[1]
 					$filtered = $matches | Where-Object {
 						# Split the entry based on "\"
 						$splitEntry = $_ -split '\\'
-						($splitEntry[0] -notlike "* *") -and ($splitEntry[0] -ne $TempHostname) -and ($splitEntry[1] -notlike "*$TempHostname*") -and ($splitEntry[1] -notlike "*$UserName*") -and ($splitEntry[1] -notlike "*$TempCurrentUser*")
+						($splitEntry[0] -notlike "* *") -and ($splitEntry[0] -ne $TempHostname) -and ($splitEntry[1] -notlike "*$TempHostname*") -and ($splitEntry[1] -notlike "*$UserNameSplit*") -and ($splitEntry[1] -notlike "*$TempCurrentUser*")
 					}
 				}
 				else{
