@@ -1,9 +1,7 @@
 # Invoke-SessionHunter
-Retrieve and display information about active user sessions on remote computers. No admin privileges required.
+Retrieve and display information about active user sessions on remote computers.
 
-In pentests and red team exercises, one of the critical objectives is to identify potential points of compromise within the network. Identifying systems with active user sessions becomes invaluable for executing targeted attacks, bolstering the potential for lateral movement, privilege escalation, and domain compromise.
-
-The tool leverages the remote registry service to query the HKEY_USERS registry hive on the remote computers. It identifies and extracts Security Identifiers (SIDs) associated with active user sessions, and translates these into corresponding usernames, offering insights into who is currently logged in.
+Initially, the tool will check if we have admin access to the target. If we do, we dump sessions informations by accessing the targets via WMI. If we don't, we leverage the remote registry service to query the HKEY_USERS registry hive on the remote computers. We identify and extract Security Identifiers (SIDs) associated with active user sessions, and translate these into corresponding usernames.
 
 It's important to note that the remote registry service needs to be running on the remote computer for the tool to work effectively. In my tests, if the service is stopped but its Startup type is configured to "Automatic" or "Manual", the service will start automatically on the target computer once queried (this is native behavior), and sessions information will be retrieved. If set to "Disabled" no session information can be retrieved from the target.
 
