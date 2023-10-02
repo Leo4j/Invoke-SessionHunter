@@ -393,7 +393,7 @@ function Invoke-SessionHunter {
 				}
 			}
 			
-			$results = $results | Sort-Object -Unique HostName, UserSession
+			$results = $results | Sort-Object -Unique Domain,Access,HostName,UserSession
 	
 			# Returning the results
 			return $results
