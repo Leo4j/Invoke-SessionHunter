@@ -295,7 +295,7 @@ function Invoke-SessionHunter {
 					$filtered = $matches | Where-Object {
 						# Split the entry based on "\"
 						$splitEntry = $_ -split '\\'
-						($splitEntry[0] -notlike "* *") -and ($splitEntry[0] -ne $TempHostname) -and ($splitEntry[1] -notlike "*$TempHostname*") -and ($splitEntry[1] -notlike "*$UserNameSplit*") -and ($splitEntry[1] -notlike "*$TempCurrentUser*")
+						($splitEntry[0] -notlike "* *") -and ($splitEntry[0] -ne $TempHostname) -and ($splitEntry[1] -notlike "*$TempHostname*") -and ($splitEntry[1] -notlike "*$UserNameSplit*") -and ($splitEntry[1] -ne $TempCurrentUser)
 					}
 				}
 				else{
@@ -441,7 +441,7 @@ function Invoke-SessionHunter {
 				$FinalResults = $allResults | Sort-Object -Unique Domain,Access,HostName,UserSession
 				$FinalResults
 			}
-     	}
+     		}
 	}
 	else{
 		if($Hunt){
@@ -466,16 +466,23 @@ function Invoke-SessionHunter {
 		}
 	}
 
+ 	$userInfo = "Ran as User: $(whoami)"
+	$domainInfo = "Domain: $($env:USERDOMAIN)"
+	$hostInfo = "Ran on Host: $($env:COMPUTERNAME).$($env:USERDOMAIN)"
+	$dateTime = "Date and Time: $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')"
+
+ 	$FinalPlusResults = @($userInfo, $domainInfo, $hostInfo, $dateTime) + $FinalResults
+
  	try{
-  		$FinalResults | Out-File $pwd\SessionHunter.txt -Force
-    	Write-Output "[+] Output saved to: $pwd\SessionHunter.txt"
+  		$FinalPlusResults | Out-File $pwd\SessionHunter.txt -Force
+    		Write-Output "[+] Output saved to: $pwd\SessionHunter.txt"
 		Write-Output ""
-    }
+    	}
   	catch{
-   		$FinalResults | Out-File c:\Users\Public\Document\SessionHunter.txt -Force
-    	Write-Output "[+] Output saved to: c:\Users\Public\Document\SessionHunter.txt"
+   		$FinalPlusResults | Out-File c:\Users\Public\Document\SessionHunter.txt -Force
+    		Write-Output "[+] Output saved to: c:\Users\Public\Document\SessionHunter.txt"
 		Write-Output ""
-    }
+    	}
 	
 }
 
