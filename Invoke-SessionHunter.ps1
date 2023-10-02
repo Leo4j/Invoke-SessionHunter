@@ -257,11 +257,11 @@ function Invoke-SessionHunter {
     			if($error[0] -eq $null){
        				$AdminStatus = $True
        				$SessionsAsAdmin += $CheckSessionsAsAdmin | Where-Object {$_ -like "*\*" -AND $_ -notlike "*$TempHostname*"}
-	   			$pattern = '\s([\w\s-]+\\[\w\s-]+\S*)\s'
-				$matches = $content | ForEach-Object {
+	   			$pattern = '\s([\w\s-]+\\[\w\s-]+\$?)\s'
+				$matches = $SessionsAsAdmin | ForEach-Object {
 				    if ($_ -match $pattern) {
 				        $matches[1]
-				    }
+				    } else {$matches = $null}
 				}
 				
 				# Output the matches
