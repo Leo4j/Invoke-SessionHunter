@@ -393,7 +393,7 @@ function Invoke-SessionHunter {
 				}
 			}
 			
-			$results = $results | Sort-Object -Unique Domain,Access,HostName,UserSession
+			$results = $results | Sort-Object -Unique HostName,UserSession
 	
 			# Returning the results
 			return $results
@@ -424,21 +424,21 @@ function Invoke-SessionHunter {
 	if($RawResults){
 		if($Hunt){
 			if($Match){
-				$FinalResults = $allResults | Where-Object { $_.User -like "*$Hunt*" -AND $_.AdmCount -eq $True -AND $_.Access -eq $True} | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount
+				$FinalResults = $allResults | Where-Object { $_.User -like "*$Hunt*" -AND $_.AdmCount -eq $True -AND $_.Access -eq $True} | Sort-Object -Unique Domain,Access,HostName,UserSession
 				$FinalResults
 			}
 			else{
-				$FinalResults = $allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount
+				$FinalResults = $allResults | Where-Object { $_.User -like "*$Hunt*" } | Sort-Object -Unique Domain,Access,HostName,UserSession
 				$FinalResults
 			}
 		}
 		else{
 			if($Match){
-				$FinalResults = $allResults | Where-Object {$_.AdmCount -eq $True -AND $_.Access -eq $True} | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount
+				$FinalResults = $allResults | Where-Object {$_.AdmCount -eq $True -AND $_.Access -eq $True} | Sort-Object -Unique Domain,Access,HostName,UserSession
 				$FinalResults
 			}
 			else{
-				$FinalResults = $allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount
+				$FinalResults = $allResults | Sort-Object -Unique Domain,Access,HostName,UserSession
 				$FinalResults
 			}
      	}
@@ -446,21 +446,21 @@ function Invoke-SessionHunter {
 	else{
 		if($Hunt){
 			if($Match){
-				$FinalResults = $allResults | Where-Object { $_.User -like "*$Hunt*" -AND $_.AdmCount -eq $True -AND $_.Access -eq $True} | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount | Format-Table -AutoSize
+				$FinalResults = $allResults | Where-Object { $_.User -like "*$Hunt*" -AND $_.AdmCount -eq $True -AND $_.Access -eq $True} | Sort-Object -Unique Domain,Access,HostName,UserSession | Format-Table -AutoSize
 				$FinalResults
 			}
 			else{
-				$FinalResults = $allResults | Where-Object { $_.User -like "*$Hunt*" } | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount | Format-Table -AutoSize
+				$FinalResults = $allResults | Where-Object { $_.User -like "*$Hunt*" } | Sort-Object -Unique Domain,Access,HostName,UserSession | Format-Table -AutoSize
 				$FinalResults
 			}
 		}
 		else{
 			if($Match){
-				$FinalResults = $allResults | Where-Object {$_.AdmCount -eq $True -AND $_.Access -eq $True} | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount | Format-Table -AutoSize
+				$FinalResults = $allResults | Where-Object {$_.AdmCount -eq $True -AND $_.Access -eq $True} | Sort-Object -Unique Domain,Access,HostName,UserSession | Format-Table -AutoSize
 				$FinalResults
 			}
 			else{
-				$FinalResults = $allResults | Select-Object Domain, HostName, IPAddress, OperatingSystem, Access, UserSession, AdmCount | Format-Table -AutoSize
+				$FinalResults = $allResults | Sort-Object -Unique Domain,Access,HostName,UserSession | Format-Table -AutoSize
 				$FinalResults
 			}
 		}
