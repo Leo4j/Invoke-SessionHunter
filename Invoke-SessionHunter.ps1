@@ -285,6 +285,12 @@ function Invoke-SessionHunter {
 				. ([scriptblock]::Create($InvokeWMIRemoting))
 				if($UserName -AND $Password){$CheckSessionsAsAdmin = Invoke-WMIRemoting -ComputerName $Computer -UserName $UserName -Password $Password -Command "klist sessions"}
 				else{$CheckSessionsAsAdmin = Invoke-WMIRemoting -ComputerName $Computer -Command "klist sessions"}
+
+    				# Check if the sessions list is empty
+				if (-not $CheckSessionsAsAdmin -or $CheckSessionsAsAdmin.Count -eq 0) {
+				    # If there's no session, return nothing
+				    return $null
+				}
 				
 				$CheckSessionsAsAdmin = ($CheckSessionsAsAdmin | Out-String) -split "`n"
 				$CheckSessionsAsAdmin = $CheckSessionsAsAdmin.Trim()
@@ -611,7 +617,7 @@ function Invoke-WMIRemoting {
 		
 		if ($startProcess.ReturnValue -eq 0) {
 			$elapsedTime = 0
-			$timeout = 60
+			$timeout = 2
 			do {
 				Start-Sleep -Seconds 1
 				$elapsedTime++
