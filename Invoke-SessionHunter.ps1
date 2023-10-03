@@ -540,6 +540,12 @@ function Get-OS {
 $InvokeWMIRemoting = @'
 function Invoke-WMIRemoting {
 	
+	<#
+	.SYNOPSIS
+	Invoke-WMIRemoting Author: Rob LP (@L3o4j)
+	https://github.com/Leo4j/Invoke-WMIRemoting
+	#>
+	
     param (
         [Parameter(Mandatory = $true)]
         [string]$ComputerName,
@@ -556,9 +562,15 @@ function Invoke-WMIRemoting {
     $ClassID = "Custom_WMI_" + (Get-Random)
     $KeyID = "CmdGUID"
 	
+	$Error.Clear()
+	
 	if($UserName -AND $Password){
 		$classExists = Get-WmiObject -Class $ClassID -ComputerName $ComputerName -List -Namespace "root\cimv2" -Credential $cred
 	}else{$classExists = Get-WmiObject -Class $ClassID -ComputerName $ComputerName -List -Namespace "root\cimv2"}
+	
+	if($error[0]){break}
+	
+	$Error.Clear()
     
 	if (-not $classExists) {
         $createNewClass = New-Object System.Management.ManagementClass("\\$ComputerName\root\cimv2", [string]::Empty, $null)
@@ -566,47 +578,76 @@ function Invoke-WMIRemoting {
         $createNewClass.Properties.Add($KeyID, [System.Management.CimType]::String, $false)
         $createNewClass.Properties[$KeyID].Qualifiers.Add("Key", $true)
         $createNewClass.Properties.Add("OutputData", [System.Management.CimType]::String, $false)
-	$createNewClass.Properties.Add("CommandStatus", [System.Management.CimType]::String, $false)
+		$createNewClass.Properties.Add("CommandStatus", [System.Management.CimType]::String, $false)
         $createNewClass.Put() | Out-Null
     }
+	
+	if($error[0]){break}
+	
+	$Error.Clear()
+	
     $wmiData = Set-WmiInstance -Class $ClassID -ComputerName $ComputerName
     $wmiData.GetType() | Out-Null
     $GuidOutput = ($wmiData | Select-Object -Property $KeyID -ExpandProperty $KeyID)
     $wmiData.Dispose()
+	
+	if($error[0]){break}
 
     $RunCmd = {
         param ([string]$CmdInput)
-	$resultData = $null
-	$wmiDataOutput = $null
+		$resultData = $null
+		$wmiDataOutput = $null
         $base64Input = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($CmdInput))
-        $commandStr = "powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Unrestricted -WindowStyle Hidden -EncodedCommand $base64Input"
+        $commandStr = "powershell.exe -NoLogo -NonInteractive -ExecutionPolicy Unrestricted -WindowStyle Hidden -EncodedCommand $base64Input"
         $finalCommand = "`$outputData = &$commandStr | Out-String; Get-WmiObject -Class $ClassID -Filter `"$KeyID = '$GuidOutput'`" | Set-WmiInstance -Arguments `@{OutputData = `$outputData; CommandStatus='Completed'} | Out-Null"
         $finalCommandBase64 = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($finalCommand))
-        if($cred){$startProcess = Invoke-WmiMethod -ComputerName $ComputerName -Class Win32_Process -Name Create -Credential $cred -ArgumentList ("powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Unrestricted -WindowStyle Hidden -EncodedCommand " + $finalCommandBase64)}
-	else{$startProcess = Invoke-WmiMethod -ComputerName $ComputerName -Class Win32_Process -Name Create -ArgumentList ("powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Unrestricted -WindowStyle Hidden -EncodedCommand " + $finalCommandBase64)}
+        if($cred){$startProcess = Invoke-WmiMethod -ComputerName $ComputerName -Class Win32_Process -Name Create -Credential $cred -ArgumentList ("powershell.exe -NoLogo -NonInteractive -ExecutionPolicy Unrestricted -WindowStyle Hidden -EncodedCommand " + $finalCommandBase64)}
+		else{$startProcess = Invoke-WmiMethod -ComputerName $ComputerName -Class Win32_Process -Name Create -ArgumentList ("powershell.exe -NoLogo -NonInteractive -ExecutionPolicy Unrestricted -WindowStyle Hidden -EncodedCommand " + $finalCommandBase64)}
 
-        if ($startProcess.ReturnValue -eq 0) {
-		$elapsedTime = 0
-		$timeout = 5
-		do {
-			Start-Sleep -Seconds 1
-			$elapsedTime++
-			if($cred){$wmiDataOutput = Get-WmiObject -Class $ClassID -ComputerName $ComputerName -Credential $cred -Filter "$KeyID = '$GuidOutput'"}
-			else{$wmiDataOutput = Get-WmiObject -Class $ClassID -ComputerName $ComputerName -Filter "$KeyID = '$GuidOutput'"}
-			if ($wmiDataOutput.CommandStatus -eq "Completed") {break}
-		} while ($elapsedTime -lt $timeout)
-            	$resultData = $wmiDataOutput.OutputData
-		$wmiDataOutput.CommandStatus = "NotStarted"
-		$wmiDataOutput.Put() | Out-Null
-		$wmiDataOutput.Dispose()
-		return $resultData
+        if ($startProcess.ReturnValue -ne 0) {
+			throw "Failed to start process on $ComputerName. Return value: $($startProcess.ReturnValue)"
+			return
+		}
+		
+		if ($startProcess.ReturnValue -eq 0) {
+			$elapsedTime = 0
+			$timeout = 60
+			do {
+				Start-Sleep -Seconds 1
+				$elapsedTime++
+				if($cred){$wmiDataOutput = Get-WmiObject -Class $ClassID -ComputerName $ComputerName -Credential $cred -Filter "$KeyID = '$GuidOutput'"}
+				else{$wmiDataOutput = Get-WmiObject -Class $ClassID -ComputerName $ComputerName -Filter "$KeyID = '$GuidOutput'"}
+				if ($wmiDataOutput.CommandStatus -eq "Completed") {
+					break
+				}
+			} while ($elapsedTime -lt $timeout)
+            $resultData = $wmiDataOutput.OutputData
+			$wmiDataOutput.CommandStatus = "NotStarted"
+			$wmiDataOutput.Put() | Out-Null
+            $wmiDataOutput.Dispose()
+            return $resultData
         } else {
             throw "Failed to run command on $ComputerName."
+			return
         }
     }
-        
-    $finalResult = & $RunCmd -CmdInput $Command
-    Write-Output $finalResult
+
+    if ($Command) {
+        $finalResult = & $RunCmd -CmdInput $Command
+        Write-Output $finalResult
+    } else {
+        do {
+            $inputFromUser = Read-Host "[$ComputerName]: PS:\>"
+            if ($inputFromUser -eq 'exit') {
+                Write-Output ""
+                break
+            }
+            if ($inputFromUser) {
+                $finalResult = & $RunCmd -CmdInput $inputFromUser
+                Write-Output $finalResult
+            }
+        } while ($true)
+    }
 	
     ([wmiclass]"\\$ComputerName\ROOT\CIMV2:$ClassID").Delete()
 }
