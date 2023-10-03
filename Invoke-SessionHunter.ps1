@@ -275,17 +275,16 @@ function Invoke-SessionHunter {
 
 			# Gather computer information
 			$ipAddress = Resolve-DnsName $Computer | Where-Object { $_.Type -eq "A" } | Select-Object -ExpandProperty IPAddress
-
+			$Error.Clear()
    			if(!$NoAdmin){
 	   			# Check Admin Access (and Sessions)
-	      			$Error.Clear()
 				if($UserName -AND $Password){
 					$SecPassword = ConvertTo-SecureString $Password -AsPlainText -Force
 					$cred = New-Object System.Management.Automation.PSCredential($UserName,$SecPassword)
 					Get-WmiObject -Class Win32_OperatingSystem -ComputerName $Computer -Credential $cred > $null
 				}
 				else{Get-WmiObject -Class Win32_OperatingSystem -ComputerName $Computer > $null}
-    			} else {throw}
+    			} else {$Error.Add("fake error") > $null}
 			if($error[0] -eq $null){
 				$AdminStatus = $True
 				. ([scriptblock]::Create($InvokeWMIRemoting))
