@@ -126,7 +126,11 @@ function Invoke-SessionHunter {
 		
 		[Parameter (Mandatory=$False, Position = 13, ValueFromPipeline=$true)]
 		[Switch]
-		$Match
+		$Match,
+
+  		[Parameter (Mandatory=$False, Position = 13, ValueFromPipeline=$true)]
+		[Switch]
+		$NoAdmin
 	
 	)
 	
@@ -257,7 +261,7 @@ function Invoke-SessionHunter {
 	foreach ($Computer in $Computers) {
 		# ScriptBlock that contains the processing code
 		$scriptBlock = {
-			param($Computer, $currentDomain, $ConnectionErrors, $searcher, $InvokeWMIRemoting, $UserName, $Password)
+			param($Computer, $currentDomain, $ConnectionErrors, $searcher, $InvokeWMIRemoting, $UserName, $Password, $NoAdmin)
 
    			# Clearing variables
 			$userSIDs = $null
@@ -272,14 +276,16 @@ function Invoke-SessionHunter {
 			# Gather computer information
 			$ipAddress = Resolve-DnsName $Computer | Where-Object { $_.Type -eq "A" } | Select-Object -ExpandProperty IPAddress
 
-   			# Check Admin Access (and Sessions)
-      			$Error.Clear()
-			if($UserName -AND $Password){
-				$SecPassword = ConvertTo-SecureString $Password -AsPlainText -Force
-				$cred = New-Object System.Management.Automation.PSCredential($UserName,$SecPassword)
-				Get-WmiObject -Class Win32_OperatingSystem -ComputerName $Computer -Credential $cred > $null
-			}
-			else{Get-WmiObject -Class Win32_OperatingSystem -ComputerName $Computer > $null}
+   			if(!$NoAdmin){
+	   			# Check Admin Access (and Sessions)
+	      			$Error.Clear()
+				if($UserName -AND $Password){
+					$SecPassword = ConvertTo-SecureString $Password -AsPlainText -Force
+					$cred = New-Object System.Management.Automation.PSCredential($UserName,$SecPassword)
+					Get-WmiObject -Class Win32_OperatingSystem -ComputerName $Computer -Credential $cred > $null
+				}
+				else{Get-WmiObject -Class Win32_OperatingSystem -ComputerName $Computer > $null}
+    			} else {throw}
 			if($error[0] -eq $null){
 				$AdminStatus = $True
 				. ([scriptblock]::Create($InvokeWMIRemoting))
@@ -414,7 +420,7 @@ function Invoke-SessionHunter {
 			return $results
 		}
 
-		$runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($Computer).AddArgument($currentDomain).AddArgument($ConnectionErrors).AddArgument($searcher).AddArgument($InvokeWMIRemoting).AddArgument($UserName).AddArgument($Password)
+		$runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($Computer).AddArgument($currentDomain).AddArgument($ConnectionErrors).AddArgument($searcher).AddArgument($InvokeWMIRemoting).AddArgument($UserName).AddArgument($Password).AddArgument($NoAdmin)
 		$runspace.RunspacePool = $runspacePool
 		$runspaces += [PSCustomObject]@{ Pipe = $runspace; Status = $runspace.BeginInvoke() }
 	}
