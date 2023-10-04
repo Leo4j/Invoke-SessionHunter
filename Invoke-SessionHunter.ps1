@@ -222,9 +222,9 @@ function Invoke-SessionHunter {
 		$runspacePool.Open()
 	
 		$scriptBlock = {
-			param ($computer, $port)
+			param ($computer)
 			$tcpClient = New-Object System.Net.Sockets.TcpClient
-			$asyncResult = $tcpClient.BeginConnect($computer, $port, $null, $null)
+			$asyncResult = $tcpClient.BeginConnect($computer, 135, $null, $null)
 			$wait = $asyncResult.AsyncWaitHandle.WaitOne(50)
 			if ($wait) {
 				try {
@@ -239,7 +239,7 @@ function Invoke-SessionHunter {
 		$runspaces = New-Object 'System.Collections.Generic.List[System.Object]'
 	
 		foreach ($computer in $Computers) {
-			$powerShellInstance = [powershell]::Create().AddScript($scriptBlock).AddArgument($computer).AddArgument($PortScan)
+			$powerShellInstance = [powershell]::Create().AddScript($scriptBlock).AddArgument($computer)
 			$powerShellInstance.RunspacePool = $runspacePool
 			$runspaces.Add([PSCustomObject]@{
 				Instance = $powerShellInstance
