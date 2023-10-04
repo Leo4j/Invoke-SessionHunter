@@ -130,7 +130,7 @@ function Invoke-SessionHunter {
 
   		[Parameter (Mandatory=$False, Position = 13, ValueFromPipeline=$true)]
 		[Switch]
-		$NoAdmin
+		$NoAdminChecks
 	
 	)
 	
@@ -255,13 +255,11 @@ function Invoke-SessionHunter {
 	# Create an array to hold the runspaces
 	$runspaces = @()
 
- 	#$InvokeWMIRemoting = (New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/Leo4j/Invoke-WMIRemoting/main/Invoke-WMIRemoting.ps1')
-
 	# Iterate through the computers, creating a runspace for each
 	foreach ($Computer in $Computers) {
 		# ScriptBlock that contains the processing code
 		$scriptBlock = {
-			param($Computer, $currentDomain, $ConnectionErrors, $searcher, $InvokeWMIRemoting, $UserName, $Password, $NoAdmin)
+			param($Computer, $currentDomain, $ConnectionErrors, $searcher, $InvokeWMIRemoting, $UserName, $Password, $NoAdminChecks)
 
    			# Clearing variables
 			$userSIDs = $null
@@ -419,7 +417,7 @@ function Invoke-SessionHunter {
 			return $results
 		}
 
-		$runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($Computer).AddArgument($currentDomain).AddArgument($ConnectionErrors).AddArgument($searcher).AddArgument($InvokeWMIRemoting).AddArgument($UserName).AddArgument($Password).AddArgument($NoAdmin)
+		$runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($Computer).AddArgument($currentDomain).AddArgument($ConnectionErrors).AddArgument($searcher).AddArgument($InvokeWMIRemoting).AddArgument($UserName).AddArgument($Password).AddArgument($NoAdminChecks)
 		$runspace.RunspacePool = $runspacePool
 		$runspaces += [PSCustomObject]@{ Pipe = $runspace; Status = $runspace.BeginInvoke() }
 	}
@@ -429,6 +427,42 @@ function Invoke-SessionHunter {
 	foreach ($runspace in $runspaces) {
 		$allResults += $runspace.Pipe.EndInvoke($runspace.Status)
 		$runspace.Pipe.Dispose()
+	}
+
+ 	if($NoAdminChecks){
+  		# Define RunspacePool
+		$runspacePool = [runspacefactory]::CreateRunspacePool(1, [Environment]::ProcessorCount)
+		$runspacePool.Open()
+	
+		$runspaces = @()
+	
+		foreach ($result in $allResults) {
+			$target = "$($result.HostName).$($result.Domain)"
+			
+			$powershell = [powershell]::Create().AddScript({
+				$Error.Clear()
+				Get-WmiObject -Class Win32_OperatingSystem -ComputerName $args > $null
+				#ls "\\$args\c$" > $null
+				return ($error[0] -eq $null)
+			}).AddArgument($target)
+	
+			$powershell.RunspacePool = $runspacePool
+	
+			$runspaces += [PSCustomObject]@{
+				PowerShell = $powershell
+				Status = $powershell.BeginInvoke()
+				Result = $result
+			}
+		}
+	
+		# Wait and collect results
+		foreach ($runspace in $runspaces) {
+			$runspace.Result.Access = [bool]($runspace.PowerShell.EndInvoke($runspace.Status))
+			$runspace.PowerShell.Dispose()
+		}
+	
+		$runspacePool.Close()
+		$runspacePool.Dispose()
 	}
 	
 	foreach ($result in $allResults) {
