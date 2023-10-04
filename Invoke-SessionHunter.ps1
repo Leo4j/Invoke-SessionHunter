@@ -218,32 +218,43 @@ function Invoke-SessionHunter {
 
  	if(!$NoPortScan){
 	
-		$reachable_hosts = $null
-		$Tasks = $null
-		$total = $Computers.Count
-		$count = 0
-		
-		if(!$Timeout){$Timeout = "50"}
-		
-		$reachable_hosts = @()
-		
-		$Tasks = $Computers | % {
-			Write-Progress -Activity "Scanning Ports" -Status "$count out of $total hosts scanned" -PercentComplete ($count / $total * 100)
+		$runspacePool = [runspacefactory]::CreateRunspacePool(1, [Environment]::ProcessorCount)
+		$runspacePool.Open()
+	
+		$scriptBlock = {
+			param ($computer, $port)
 			$tcpClient = New-Object System.Net.Sockets.TcpClient
-			$asyncResult = $tcpClient.BeginConnect($_, 135, $null, $null)
-			$wait = $asyncResult.AsyncWaitHandle.WaitOne($Timeout)
-			if($wait) {
-   				try{
-				$tcpClient.EndConnect($asyncResult)
-				$reachable_hosts += $_
-    				} catch{}
+			$asyncResult = $tcpClient.BeginConnect($computer, $port, $null, $null)
+			$wait = $asyncResult.AsyncWaitHandle.WaitOne(50)
+			if ($wait) {
+				try {
+					$tcpClient.EndConnect($asyncResult)
+					return $computer
+				} catch {}
 			}
-   			$tcpClient.Close()
-			$count++
+			$tcpClient.Close()
+			return $null
 		}
-		
-		Write-Progress -Activity "Scanning Ports" -Completed
-		
+	
+		$runspaces = New-Object 'System.Collections.Generic.List[System.Object]'
+	
+		foreach ($computer in $Computers) {
+			$powerShellInstance = [powershell]::Create().AddScript($scriptBlock).AddArgument($computer).AddArgument($PortScan)
+			$powerShellInstance.RunspacePool = $runspacePool
+			$runspaces.Add([PSCustomObject]@{
+				Instance = $powerShellInstance
+				Status   = $powerShellInstance.BeginInvoke()
+			})
+		}
+	
+		$reachable_hosts = @()
+		foreach ($runspace in $runspaces) {
+			$result = $runspace.Instance.EndInvoke($runspace.Status)
+			if ($result) {
+				$reachable_hosts += $result
+			}
+		}
+	
 		$Computers = $reachable_hosts
 
  	}
