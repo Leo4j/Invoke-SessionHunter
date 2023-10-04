@@ -274,7 +274,7 @@ function Invoke-SessionHunter {
 			# Gather computer information
 			$ipAddress = Resolve-DnsName $Computer | Where-Object { $_.Type -eq "A" } | Select-Object -ExpandProperty IPAddress
 			$Error.Clear()
-   			if(!$NoAdmin){
+   			if(!$NoAdminChecks){
 	   			# Check Admin Access (and Sessions)
 				if($UserName -AND $Password){
 					$SecPassword = ConvertTo-SecureString $Password -AsPlainText -Force
