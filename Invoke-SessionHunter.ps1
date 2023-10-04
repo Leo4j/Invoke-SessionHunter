@@ -218,9 +218,11 @@ function Invoke-SessionHunter {
 
  	if(!$NoPortScan){
 	
-		$runspacePool = [runspacefactory]::CreateRunspacePool(1, [Environment]::ProcessorCount)
+		# Initialize the runspace pool
+		$runspacePool = [runspacefactory]::CreateRunspacePool(1, 10)
 		$runspacePool.Open()
-	
+
+		# Define the script block outside the loop for better efficiency
 		$scriptBlock = {
 			param ($computer)
 			$tcpClient = New-Object System.Net.Sockets.TcpClient
@@ -235,9 +237,10 @@ function Invoke-SessionHunter {
 			$tcpClient.Close()
 			return $null
 		}
-	
+
+		# Use a generic list for better performance when adding items
 		$runspaces = New-Object 'System.Collections.Generic.List[System.Object]'
-	
+
 		foreach ($computer in $Computers) {
 			$powerShellInstance = [powershell]::Create().AddScript($scriptBlock).AddArgument($computer)
 			$powerShellInstance.RunspacePool = $runspacePool
@@ -246,7 +249,8 @@ function Invoke-SessionHunter {
 				Status   = $powerShellInstance.BeginInvoke()
 			})
 		}
-	
+
+		# Collect the results
 		$reachable_hosts = @()
 		foreach ($runspace in $runspaces) {
 			$result = $runspace.Instance.EndInvoke($runspace.Status)
@@ -254,8 +258,13 @@ function Invoke-SessionHunter {
 				$reachable_hosts += $result
 			}
 		}
-	
+
+		# Update the $Computers variable with the list of reachable hosts
 		$Computers = $reachable_hosts
+
+		# Close and dispose of the runspace pool for good resource management
+		$runspacePool.Close()
+		$runspacePool.Dispose()
 
  	}
 	
