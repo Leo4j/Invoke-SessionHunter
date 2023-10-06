@@ -13,13 +13,49 @@ It's important to note that the remote registry service needs to be running on t
 iex(new-object net.webclient).downloadstring('https://raw.githubusercontent.com/Leo4j/Invoke-SessionHunter/main/Invoke-SessionHunter.ps1')
 ```
 
-If run without parameters or switches it will retrieve active sessions for all computers in the current domain
+If run without parameters or switches it will retrieve active sessions for all computers in the current domain by querying the registry
 
 ```
 Invoke-SessionHunter
 ```
 
-![image](https://github.com/Leo4j/Invoke-SessionHunter/assets/61951374/ade5b58f-83fa-45b8-ad27-c7e3b20867c8)
+If the `-CheckAdminAccess` switch is provided, it will gather sessions by authenticating to targets (and retrieve more results)
+
+```
+Invoke-SessionHunter -CheckAsAdmin
+```
+
+You can optionally provide credentials in the following format
+
+```
+Invoke-SessionHunter -CheckAsAdmin -UserName "ferrari\Administrator" -Password "P@ssw0rd!"
+```
+
+You can also use the -FailSafe switch, which will direct the tool to proceed if the target remote registry becomes unresponsive.
+
+This works in cobination with -Timeout | Default = 2, increase for slower networks.
+
+```
+Invoke-SessionHunter -FailSafe
+```
+```
+Invoke-SessionHunter -FailSafe -Timeout 5
+```
+
+Use the -Match switch to show only targets where you have admin access and a privileged user is logged in
+
+```
+Invoke-SessionHunter -Match
+```
+
+All switches can be combined
+
+```
+Invoke-SessionHunter -CheckAsAdmin -UserName "ferrari\Administrator" -Password "P@ssw0rd!" -FailSafe -Timeout 5 -Match
+```
+
+![image](https://github.com/Leo4j/Invoke-SessionHunter/assets/61951374/0505d8d7-231a-4e3e-b157-58900e7bba85)
+
 
 ### Specify the target domain
 
@@ -27,16 +63,13 @@ Invoke-SessionHunter
 Invoke-SessionHunter -Domain contoso.local
 ```
 
-### Specify a comma-separated list of targets
+### Specify a comma-separated list of targets or the full path to a file containing a list of targets - one per line
 
 ```
 Invoke-SessionHunter -Targets "DC01,Workstation01.contoso.local"
 ```
-	
-### Specify the full path to a file containing a list of targets - one per line
-
 ```
-Invoke-SessionHunter -TargetsFile c:\Users\Public\Documents\targets.txt
+Invoke-SessionHunter -Targets c:\Users\Public\Documents\targets.txt
 ```
 
 ### Retrieve and display information about active user sessions on servers only
@@ -60,25 +93,13 @@ Invoke-SessionHunter -Hunt "Administrator"
 ### Exclude localhost from the sessions retrieval
 
 ```
-Invoke-SessionHunter -ExcludeLocalHost
+Invoke-SessionHunter -IncludeLocalHost
 ```
 
 ### Return custom PSObjects instead of table-formatted results
 
 ```
 Invoke-SessionHunter -RawResults
-```
-
-### Show hostnames that returned connection errors
-
-```
-Invoke-SessionHunter -ConnectionErrors
-```
-
-### Timeout for the initial network scan (default: 50ms)
-
-```
-Invoke-SessionHunter -Timeout 100
 ```
 
 ### Do not run a port scan to enumerate for alive hosts before trying to retrieve sessions
