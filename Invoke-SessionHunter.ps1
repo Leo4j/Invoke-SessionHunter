@@ -9,15 +9,6 @@ function Invoke-SessionHunter {
 	.DESCRIPTION
 	Retrieve and display information about active user sessions on remote computers.
 	Admin privileges on the remote systems are not required.
-	If run without parameters or switches it will retrieve active sessions for all computers in the current domain.
- 	Initially, the tool will check if we have admin access to the target. If we do, it will dump sessions informations.
-	If we have no admin access to the target, the tool will leverage the remote registry service to query the HKEY_USERS registry hive.
-	It then identifies and extracts Security Identifiers (SIDs) associated with active user sessions,
-	and translates these into corresponding usernames, offering insights into who is currently logged in.
-	It's important to note that the remote registry service needs to be running on the remote computer for the tool to work effectively.
-	In my tests, if the service is stopped but its Startup type is configured to "Automatic" or "Manual",
-	the service will start automatically on the target computer once queried (this is native behavior),
-	and sessions information will be retrieved. If set to "Disabled" no session information can be retrieved from the target.
 	
 	.PARAMETER Domain
 	Specify the target domain
