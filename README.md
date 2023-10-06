@@ -1,13 +1,13 @@
 # Invoke-SessionHunter
 Retrieve and display information about active user sessions on remote computers. No admin privileges required.
 
-In pentests and red team exercises, one of the critical objectives is to identify potential points of compromise within the network. Identifying systems with active user sessions becomes invaluable for executing targeted attacks, bolstering the potential for lateral movement, privilege escalation, and domain compromise.
-
 The tool leverages the remote registry service to query the HKEY_USERS registry hive on the remote computers. It identifies and extracts Security Identifiers (SIDs) associated with active user sessions, and translates these into corresponding usernames, offering insights into who is currently logged in.
+
+If the `-CheckAdminAccess` switch is provided, it will gather sessions by authenticating to targets where you have local admin access using [Invoke-WMIRemoting](https://github.com/Leo4j/Invoke-WMIRemoting) (which most likely will retrieve more results)
 
 It's important to note that the remote registry service needs to be running on the remote computer for the tool to work effectively. In my tests, if the service is stopped but its Startup type is configured to "Automatic" or "Manual", the service will start automatically on the target computer once queried (this is native behavior), and sessions information will be retrieved. If set to "Disabled" no session information can be retrieved from the target.
 
-### Run as follows:
+### Usage:
 
 ```
 iex(new-object net.webclient).downloadstring('https://raw.githubusercontent.com/Leo4j/Invoke-SessionHunter/main/Invoke-SessionHunter.ps1')
@@ -19,7 +19,7 @@ If run without parameters or switches it will retrieve active sessions for all c
 Invoke-SessionHunter
 ```
 
-If the `-CheckAdminAccess` switch is provided, it will gather sessions by authenticating to targets where you have local admin access using [Invoke-WMIRemoting](https://github.com/Leo4j/Invoke-WMIRemoting) (which most likely will retrieve more results)
+Gather sessions by authenticating to targets where you have local admin access
 
 ```
 Invoke-SessionHunter -CheckAsAdmin
