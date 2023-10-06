@@ -19,7 +19,7 @@ If run without parameters or switches it will retrieve active sessions for all c
 Invoke-SessionHunter
 ```
 
-If the `-CheckAdminAccess` switch is provided, it will gather sessions by authenticating to targets (and retrieve more results)
+If the `-CheckAdminAccess` switch is provided, it will gather sessions by authenticating to targets where you have local admin access using [Invoke-WMIRemoting](https://github.com/Leo4j/Invoke-WMIRemoting) (which most likely will retrieve more results)
 
 ```
 Invoke-SessionHunter -CheckAsAdmin
