@@ -806,11 +806,6 @@ function Invoke-WMIRemoting {
 
 	
 	if($error[0]){break}
-	
-	$cimSession = $null
-	if ($cred) {
-		$cimSession = New-CimSession -ComputerName $ComputerName -Credential $cred
-	}
 
     $RunCmd = {
         param ([string]$CmdInput)
