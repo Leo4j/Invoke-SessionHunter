@@ -8,7 +8,7 @@ It's important to note that the remote registry service needs to be running on t
 ### Run as follows:
 
 ```
-iex(new-object net.webclient).downloadstring('https://raw.githubusercontent.com/Leo4j/Invoke-SessionHunter/main/Invoke-SessionHunter.ps1')
+iex(new-object net.webclient).downloadstring('https://raw.githubusercontent.com/Leo4j/Invoke-SessionHunter/dev/Invoke-SessionHunter.ps1')
 ```
 
 If run without parameters or switches it will retrieve active sessions for all computers in the current domain
