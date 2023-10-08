@@ -300,8 +300,8 @@ function Invoke-SessionHunter {
 						$processOutput = $null
 
 						$command = @"
-						\$cred = New-Object System.Management.Automation.PSCredential('$UserName', (ConvertTo-SecureString -String '$Password' -AsPlainText -Force));
-						Get-WmiObject -Class Win32_OperatingSystem -ComputerName '$Computer' -Credential \$cred > \$null
+						`$cred = New-Object System.Management.Automation.PSCredential('$UserName', (ConvertTo-SecureString -String '$Password' -AsPlainText -Force));
+						Get-WmiObject -Class Win32_OperatingSystem -ComputerName '$Computer' -Credential `$cred > `$null
 "@
 
 						# Start the process and capture output directly
@@ -351,7 +351,7 @@ function Invoke-SessionHunter {
 						# Start the process and capture output directly
 						$processStartInfo = New-Object System.Diagnostics.ProcessStartInfo
 						$processStartInfo.FileName = "powershell.exe"
-						$processStartInfo.Arguments = "-Command ""Get-WmiObject -Class Win32_OperatingSystem -ComputerName '$Computer' > $null"""
+						$processStartInfo.Arguments = "-Command ""Get-WmiObject -Class Win32_OperatingSystem -ComputerName '$Computer' > `$null"""
 						$processStartInfo.RedirectStandardOutput = $true
 						$processStartInfo.UseShellExecute = $false
 
@@ -451,8 +451,8 @@ function Invoke-SessionHunter {
 				
 				if($FailSafe){
 					#$timeoutSeconds = 2
-							$checkIntervalMilliseconds = 100
-							$elapsedTime = 0
+					$checkIntervalMilliseconds = 100
+					$elapsedTime = 0
 					$processOutput = $null
 
 					# Start the process and capture output directly
@@ -554,7 +554,7 @@ function Invoke-SessionHunter {
  	if(!$CheckAsAdmin){
 		if($FailSafe){
 			if($Timeout){$timeoutSeconds = $Timeout}
-      		else{$timeoutSeconds = 2}
+      			else{$timeoutSeconds = 2}
 			$checkIntervalMilliseconds = 100
 
 			foreach ($result in $allResults) {
@@ -565,7 +565,7 @@ function Invoke-SessionHunter {
 				# Start the process and capture output directly
 				$processStartInfo = New-Object System.Diagnostics.ProcessStartInfo
 				$processStartInfo.FileName = "powershell.exe"
-				$processStartInfo.Arguments = "-Command ""Get-WmiObject -Class Win32_OperatingSystem -ComputerName '$Computer' > $null"""
+				$processStartInfo.Arguments = "-Command ""Get-WmiObject -Class Win32_OperatingSystem -ComputerName '$Computer' > `$null"""
 				$processStartInfo.RedirectStandardOutput = $true
 				$processStartInfo.UseShellExecute = $false
 
