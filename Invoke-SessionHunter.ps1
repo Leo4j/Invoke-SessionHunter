@@ -17,7 +17,7 @@ function Invoke-SessionHunter {
 	Specify the target domain
 	
 	.PARAMETER Targets
-	Specify a comma-separated list of targets
+	Specify a comma-separated list of targets, or the path to a file containing targets (one per line)
 	
 	.PARAMETER Hunt
 	Show active session for the specified user only
