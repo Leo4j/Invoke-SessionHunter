@@ -579,12 +579,7 @@ function Invoke-SessionHunter {
 	
  	# Show Results
 	$FinalResults = $allResults | Sort-Object -Unique Domain,Access,AdmCount,HostName,UserSession | Format-Table -AutoSize -Wrap | Out-String -Width 4096
-	if($FinalResults){
-	 	$lines = $FinalResults -split "`n"
-		foreach($line in $lines) {
-		    Write-Output $line
-		}
-  	} else {Write-Output "[-] No Sessions Retrieved"}
+	$FinalResults
 
 }
 
