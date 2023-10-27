@@ -1084,9 +1084,14 @@ function AdminCount {
     $searchResponse = $LdapConnection.SendRequest($searchRequest)
 
     # Check if results were returned and output the adminCount property.
-    if ($searchResponse.Entries.Count -ne 0) {
-        $adminCount = $searchResponse.Entries[0].Attributes["adminCount"][0]
-        return ($adminCount -eq 1)
+    if ($searchResponse.Entries -ne $null -and $searchResponse.Entries.Count -ne 0) {
+        $entry = $searchResponse.Entries[0]
+        if ($entry.Attributes["adminCount"] -ne $null -and $entry.Attributes["adminCount"].Count -gt 0) {
+            $adminCount = $entry.Attributes["adminCount"][0]
+            return ($adminCount -eq 1)
+		} else {
+            return $false
+        }
     } else {
         return $false
     }
