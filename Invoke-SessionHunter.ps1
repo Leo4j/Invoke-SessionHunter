@@ -578,10 +578,6 @@ function Invoke-SessionHunter {
 	}
 	
  	# Show Results
-
-  	$Host.UI.RawUI.ForegroundColor = $currentTextColor
-	$Host.UI.RawUI.BackgroundColor = $Color
-
 	$FinalResults = $allResults | Sort-Object -Unique Domain,Access,AdmCount,HostName,UserSession | Format-Table -AutoSize
 	$FinalResults
 }
