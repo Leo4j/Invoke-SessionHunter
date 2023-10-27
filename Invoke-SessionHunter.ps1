@@ -5,65 +5,6 @@ function Invoke-SessionHunter {
 	.SYNOPSIS
 	Invoke-SessionHunter Author: Rob LP (@L3o4j)
 	https://github.com/Leo4j/Invoke-SessionHunter
-
-	.DESCRIPTION
-	Retrieve and display information about active user sessions on remote computers.
-	Admin privileges on the remote systems are not required.
-	
-	.PARAMETER Domain
-	Specify the target domain
-	
-	.PARAMETER DomainController
-	Specify the target domain
-	
-	.PARAMETER Targets
-	Specify a comma-separated list of targets, or the path to a file containing targets (one per line)
-	
-	.PARAMETER Hunt
-	Show active session for the specified user only
-	
-	.PARAMETER FailSafe
-	Instructs the tool to move on if the target remote registry hangs
-	
-	.PARAMETER Timeout
-	Timeout (in seconds) for remote registry access to prevent hanging. Works in combination with -FailSafe. Default = 2, increase for slower networks.
-	
-	.PARAMETER Servers
-	Retrieve and display information about active user sessions on servers only
-	
-	.PARAMETER Workstations
-	Retrieve and display information about active user sessions on workstations only
-	
-	.PARAMETER ExcludeLocalHost
-	Exclude localhost from the sessions retrieval
-
- 	.PARAMETER UserName
-	Check sessions authenticating to targets as the specified UserName
-
- 	.PARAMETER Password
-	Provide password for the specified UserName
-	
-	.PARAMETER RawResults
-	Return custom PSObjects instead of table-formatted results
-
- 	.PARAMETER NoPortScan
-	Do not run a port scan to enumerate for alive hosts before trying to retrieve sessions
-
- 	.PARAMETER Match
-  	Show only hosts where we are admin, and where a session for a user with admin count set to 1 exists
-
-   	.PARAMETER CheckAsAdmin
-  	Retrieve sessions as an admin where you have local admin privileges; otherwise, use the registry.
-
-	.EXAMPLE
-	Invoke-SessionHunter
- 	Invoke-SessionHunter -CheckAsAdmin
-  	Invoke-SessionHunter -CheckAsAdmin -UserName ferrari\Administrator -Password P@ssw0rd!
-   	Invoke-SessionHunter -CheckAsAdmin -Timeout 2
-	Invoke-SessionHunter -Domain contoso.local
-	Invoke-SessionHunter -Domain contoso.local -Servers
-	Invoke-SessionHunter -TargetsFile c:\Users\Public\Documents\targets.txt
-	Invoke-SessionHunter -Hunt "Administrator"
 	
 	#>
     
@@ -134,10 +75,7 @@ function Invoke-SessionHunter {
 	$ErrorActionPreference = "SilentlyContinue"
 	$WarningPreference = "SilentlyContinue"
 	Set-Variable MaximumHistoryCount 32767
-	$Color = $Host.UI.RawUI.BackgroundColor
-	$currentTextColor = $Host.UI.RawUI.ForegroundColor
- 	$stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-	
+
 	$ldapretrieveddomain = $False
 	
 	if($UserName -AND $Password){$CheckAsAdmin = $True}
@@ -644,76 +582,8 @@ function Invoke-SessionHunter {
   	$Host.UI.RawUI.ForegroundColor = $currentTextColor
 	$Host.UI.RawUI.BackgroundColor = $Color
 
-	if($RawResults){
-		if($Hunt){
-			if($Match){
-				$FinalResults = $allResults | Where-Object { $_.User -like "*$Hunt*" -AND $_.AdmCount -eq $True -AND $_.Access -eq $True} | Sort-Object -Unique Domain,Access,AdmCount,HostName,UserSession
-				$FinalResults
-			}
-			else{
-				$FinalResults = $allResults | Where-Object { $_.User -like "*$Hunt*" } | Sort-Object -Unique Domain,Access,AdmCount,HostName,UserSession
-				$FinalResults
-			}
-		}
-		else{
-			if($Match){
-				$FinalResults = $allResults | Where-Object {$_.AdmCount -eq $True -AND $_.Access -eq $True} | Sort-Object -Unique Domain,Access,AdmCount,HostName,UserSession
-				$FinalResults
-			}
-			else{
-				$FinalResults = $allResults | Sort-Object -Unique Domain,Access,AdmCount,HostName,UserSession
-				$FinalResults
-			}
-     		}
-	}
-	else{
-		if($Hunt){
-			if($Match){
-				$FinalResults = $allResults | Where-Object { $_.User -like "*$Hunt*" -AND $_.AdmCount -eq $True -AND $_.Access -eq $True} | Sort-Object -Unique Domain,Access,AdmCount,HostName,UserSession | Format-Table -AutoSize
-				$FinalResults
-			}
-			else{
-				$FinalResults = $allResults | Where-Object { $_.User -like "*$Hunt*" } | Sort-Object -Unique Domain,Access,AdmCount,HostName,UserSession | Format-Table -AutoSize
-				$FinalResults
-			}
-		}
-		else{
-			if($Match){
-				$FinalResults = $allResults | Where-Object {$_.AdmCount -eq $True -AND $_.Access -eq $True} | Sort-Object -Unique Domain,Access,AdmCount,HostName,UserSession | Format-Table -AutoSize
-				$FinalResults
-			}
-			else{
-				$FinalResults = $allResults | Sort-Object -Unique Domain,Access,AdmCount,HostName,UserSession | Format-Table -AutoSize
-				$FinalResults
-			}
-		}
-	}
-
- 	$stopwatch.Stop()
-	$elapsedTime = $stopwatch.Elapsed
-
- 	$userInfo = "Ran as User: $(whoami)"
-	$domainInfo = "Domain: $($env:USERDOMAIN)"
-	$hostInfo = "Ran on Host: $($env:COMPUTERNAME).$($env:USERDOMAIN)"
-	$dateTime = "Date and Time: $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')"
- 	$ResultselapsedTime = "Elapsed time: $($elapsedTime.Hours):$($elapsedTime.Minutes):$($elapsedTime.Seconds).$($elapsedTime.Milliseconds)"
-
- 	$FinalPlusResults = @($userInfo, $domainInfo, $hostInfo, $dateTime, $ResultselapsedTime) + $FinalResults
-
- 	try{
-  		$FinalPlusResults | Out-File $pwd\SessionHunter.txt -Force
-    		Write-Output "[+] Output saved to: $pwd\SessionHunter.txt"
-		Write-Output ""
-    	}
-  	catch{
-   		$FinalPlusResults | Out-File c:\Users\Public\Document\SessionHunter.txt -Force
-    		Write-Output "[+] Output saved to: c:\Users\Public\Document\SessionHunter.txt"
-		Write-Output ""
-    	}
-
-	Write-Host "[+] Elapsed time: $($elapsedTime.Hours):$($elapsedTime.Minutes):$($elapsedTime.Seconds).$($elapsedTime.Milliseconds)"
- 	Write-Host ""
-	
+	$FinalResults = $allResults | Sort-Object -Unique Domain,Access,AdmCount,HostName,UserSession | Format-Table -AutoSize
+	$FinalResults
 }
 
 $InvokeWMIRemoting = @'
