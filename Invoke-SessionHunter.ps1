@@ -883,6 +883,8 @@ function Establish-LDAPSession {
         [string]$DomainController
     )
 
+    $ErrorActionPreference = "SilentlyContinue"
+
     # If the DomainController parameter is just a name (not FQDN), append the domain to it.
     if ($DomainController -notlike "*.*") {
         $DomainController = "$DomainController.$Domain"
@@ -915,6 +917,8 @@ function Get-ADComputers {
         [string]$ADCompDomain,
         [System.DirectoryServices.Protocols.LdapConnection]$LdapConnection  # The previously established connection
     )
+
+    $ErrorActionPreference = "SilentlyContinue"
 
     # Construct distinguished name for the domain.
     $domainDistinguishedName = "DC=" + ($ADCompDomain -replace "\.", ",DC=")
@@ -965,6 +969,8 @@ function Get-ADWorkstations {
         [System.DirectoryServices.Protocols.LdapConnection]$LdapConnection  # The previously established connection
     )
 
+    $ErrorActionPreference = "SilentlyContinue"
+
     # Construct distinguished name for the domain.
     $domainDistinguishedName = "DC=" + ($ADCompDomain -replace "\.", ",DC=")
 
@@ -1013,6 +1019,8 @@ function Get-ADServers {
         [string]$ADCompDomain,
         [System.DirectoryServices.Protocols.LdapConnection]$LdapConnection  # The previously established connection
     )
+
+    $ErrorActionPreference = "SilentlyContinue"
 
     # Construct distinguished name for the domain.
     $domainDistinguishedName = "DC=" + ($ADCompDomain -replace "\.", ",DC=")
@@ -1064,6 +1072,8 @@ function AdminCount {
         [System.DirectoryServices.Protocols.LdapConnection]$LdapConnection
     )
 
+    $ErrorActionPreference = "SilentlyContinue"
+
     # Assuming all user objects are under the default "CN=Users" container.
     # Adjust this according to your Active Directory structure.
     $domainDistinguishedName = "DC=" + ($Domain -replace "\.", ",DC=")
@@ -1103,6 +1113,8 @@ function Get-OS {
 		[string]$Domain,
         [System.DirectoryServices.Protocols.LdapConnection]$LdapConnection
     )
+
+    $ErrorActionPreference = "SilentlyContinue"
 
     # Construct the search base. Assuming all computer objects are under the default "CN=Computers" container.
     # You might need to adjust this if your AD structure differs.
