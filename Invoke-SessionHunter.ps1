@@ -578,7 +578,7 @@ function Invoke-SessionHunter {
 	}
 	
  	# Show Results
-	$FinalResults = $allResults | Sort-Object -Unique Domain,Access,AdmCount,HostName,UserSession | Format-Table -AutoSize | Out-String
+	$FinalResults = $allResults | Sort-Object -Unique Domain,Access,AdmCount,HostName,UserSession | Format-Table -AutoSize -Wrap | Out-String -Width 4096
 	$lines = $FinalResults -split "`n"
 	foreach($line in $lines) {
 	    Write-Output $line
