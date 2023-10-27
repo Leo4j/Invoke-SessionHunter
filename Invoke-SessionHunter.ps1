@@ -579,7 +579,12 @@ function Invoke-SessionHunter {
 	
  	# Show Results
 	$FinalResults = $allResults | Sort-Object -Unique Domain,Access,AdmCount,HostName,UserSession | Format-Table -AutoSize -Wrap | Out-String -Width 4096
-	$FinalResults
+	if($FinalResults){
+	 	$lines = $FinalResults -split "`n"
+		foreach($line in $lines) {
+		    Write-Output $line
+		}
+  	} else {Write-Output "[-] No Sessions Retrieved"}
 
 }
 
@@ -750,6 +755,8 @@ function Establish-LDAPSession {
         [string]$DomainController
     )
 
+    $ErrorActionPreference = "SilentlyContinue"
+
     # If the DomainController parameter is just a name (not FQDN), append the domain to it.
     if ($DomainController -notlike "*.*") {
         $DomainController = "$DomainController.$Domain"
@@ -782,6 +789,8 @@ function Get-ADComputers {
         [string]$ADCompDomain,
         [System.DirectoryServices.Protocols.LdapConnection]$LdapConnection  # The previously established connection
     )
+
+    $ErrorActionPreference = "SilentlyContinue"
 
     # Construct distinguished name for the domain.
     $domainDistinguishedName = "DC=" + ($ADCompDomain -replace "\.", ",DC=")
@@ -832,6 +841,8 @@ function Get-ADWorkstations {
         [System.DirectoryServices.Protocols.LdapConnection]$LdapConnection  # The previously established connection
     )
 
+    $ErrorActionPreference = "SilentlyContinue"
+
     # Construct distinguished name for the domain.
     $domainDistinguishedName = "DC=" + ($ADCompDomain -replace "\.", ",DC=")
 
@@ -880,6 +891,8 @@ function Get-ADServers {
         [string]$ADCompDomain,
         [System.DirectoryServices.Protocols.LdapConnection]$LdapConnection  # The previously established connection
     )
+
+    $ErrorActionPreference = "SilentlyContinue"
 
     # Construct distinguished name for the domain.
     $domainDistinguishedName = "DC=" + ($ADCompDomain -replace "\.", ",DC=")
@@ -931,6 +944,8 @@ function AdminCount {
         [System.DirectoryServices.Protocols.LdapConnection]$LdapConnection
     )
 
+    $ErrorActionPreference = "SilentlyContinue"
+
     # Assuming all user objects are under the default "CN=Users" container.
     # Adjust this according to your Active Directory structure.
     $domainDistinguishedName = "DC=" + ($Domain -replace "\.", ",DC=")
@@ -951,9 +966,14 @@ function AdminCount {
     $searchResponse = $LdapConnection.SendRequest($searchRequest)
 
     # Check if results were returned and output the adminCount property.
-    if ($searchResponse.Entries.Count -ne 0) {
-        $adminCount = $searchResponse.Entries[0].Attributes["adminCount"][0]
-        return ($adminCount -eq 1)
+    if ($searchResponse.Entries -ne $null -and $searchResponse.Entries.Count -ne 0) {
+        $entry = $searchResponse.Entries[0]
+        if ($entry.Attributes["adminCount"] -ne $null -and $entry.Attributes["adminCount"].Count -gt 0) {
+            $adminCount = $entry.Attributes["adminCount"][0]
+            return ($adminCount -eq 1)
+		} else {
+            return $false
+        }
     } else {
         return $false
     }
@@ -965,6 +985,8 @@ function Get-OS {
 		[string]$Domain,
         [System.DirectoryServices.Protocols.LdapConnection]$LdapConnection
     )
+
+    $ErrorActionPreference = "SilentlyContinue"
 
     # Construct the search base. Assuming all computer objects are under the default "CN=Computers" container.
     # You might need to adjust this if your AD structure differs.
