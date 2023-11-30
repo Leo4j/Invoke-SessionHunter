@@ -179,31 +179,18 @@ function Invoke-SessionHunter {
 	
 	else{
 		$Computers = @()
-		$objSearcher = New-Object System.DirectoryServices.DirectorySearcher
-		if($Domain){
-			if($DomainController){
-				$TempDomainName = "DC=" + $Domain.Split(".")
-				$domainDN = $TempDomainName -replace " ", ",DC="
-				$ldapPath = "LDAP://$DomainController/$domainDN"
-				$objSearcher.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry($ldapPath)
-			}
-			else{$objSearcher.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$Domain")}
-		}
-		else{$objSearcher.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry}
 		if($Servers){
-			$objSearcher.Filter = "(&(objectCategory=computer)(objectClass=computer)(!(userAccountControl:1.2.840.113556.1.4.803:=2))(operatingSystem=*Server*))"
+			$Computers = Get-ADComputers -ADCompDomain $Domain -Servers
 		}
 
 		elseif($Workstations){
-			$objSearcher.Filter = "(&(objectCategory=computer)(objectClass=computer)(!(userAccountControl:1.2.840.113556.1.4.803:=2))(!(operatingSystem=*Server*)))"
+			$Computers = Get-ADComputers -ADCompDomain $Domain -Workstations
 		}
 		
 		else{
-			$objSearcher.Filter = "(&(sAMAccountType=805306369)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))"
+			$Computers = Get-ADComputers -ADCompDomain $Domain
 		}
-		$objSearcher.PageSize = 1000
-		$Computers = $objSearcher.FindAll() | ForEach-Object { $_.properties.dnshostname }
-		$Computers = $Computers | Sort-Object -Unique
+		$Computers = $Computers | Sort-Object
 	}
 	
 	if(!$IncludeLocalHost){
@@ -885,6 +872,50 @@ function Invoke-WMIRemoting {
 	else{([wmiclass]"\\$ComputerName\ROOT\CIMV2:$ClassID").Delete()}
 }
 '@
+
+function Get-ADComputers {
+    param (
+        [string]$ADCompDomain,
+	[switch]$Servers,
+ 	[switch]$Workstations
+    )
+
+    $allcomputers = @()
+    $objSearcher = New-Object System.DirectoryServices.DirectorySearcher
+
+    # Construct distinguished name for the domain.
+    if ($ADCompDomain) {
+        $domainDN = "DC=" + ($ADCompDomain -replace "\.", ",DC=")
+        $ldapPath = "LDAP://$domainDN"
+        $objSearcher.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry($ldapPath)
+    } else {
+        $objSearcher.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry
+    }
+
+    # LDAP search request setup.
+    if($Servers){
+        $objSearcher.Filter = "(&(objectCategory=computer)(objectClass=computer)(!(userAccountControl:1.2.840.113556.1.4.803:=2))(operatingSystem=*Server*))"
+    }
+
+    elseif($Workstations){
+        $objSearcher.Filter = "(&(objectCategory=computer)(objectClass=computer)(!(userAccountControl:1.2.840.113556.1.4.803:=2))(!(operatingSystem=*Server*)))"
+    }
+
+    else{
+        $objSearcher.Filter = "(&(sAMAccountType=805306369)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))"
+    }
+    $objSearcher.PageSize = 1000  # Handling paging internally
+
+    # Perform the search
+    $results = $objSearcher.FindAll()
+
+    # Process the results
+    foreach ($result in $results) {
+        $allcomputers += $result.Properties["dNSHostName"]
+    }
+
+    return $allcomputers | Sort-Object -Unique
+}
 
 function AdminCount {
     param (
