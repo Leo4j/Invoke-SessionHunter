@@ -644,8 +644,8 @@ function Invoke-SessionHunter {
 		$username = ($result.UserSession -split '\\')[1]
 		$TargetHost = $result.HostName
 		if($username -like '*$'){$result.AdmCount = "N/A"}
-		else{$result.AdmCount = AdminCount -UserName $username -LdapConnection $connection -Domain $Domain}
-		$result.OperatingSystem = Get-OS -HostName $TargetHost -LdapConnection $connection -Domain $Domain
+		else{$result.AdmCount = AdminCount -UserName $username -Domain $Domain}
+		$result.OperatingSystem = Get-OS -HostName $TargetHost -Domain $Domain
 	}
 	
  	# Show Results
