@@ -927,20 +927,15 @@ function AdminCount {
 
     # Construct distinguished name for the domain.
     $domainDistinguishedName = "DC=" + ($Domain -replace "\.", ",DC=")
-    $baseDN = "CN=Users,$domainDistinguishedName"  # Replace with your domain DN
+    $targetdomain = "LDAP://$domainDistinguishedName"
 
-    # Set up the search filter
-    $ldapFilter = "(sAMAccountName=$UserName)"
-    $attributesToLoad = @("adminCount")
-
-    # Create the directory searcher
     $searcher = New-Object System.DirectoryServices.DirectorySearcher
-    $searcher.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$baseDN")
-    $searcher.Filter = $ldapFilter
-    $searcher.PropertiesToLoad.Add($attributesToLoad) > $null
-
-    # Perform the search
-    $result = $searcher.FindOne()
+    $searcher.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry $targetdomain
+    $searcher.PageSize = 1000
+    $Searcher.Filter = "(sAMAccountName=$UserName)"
+    $Searcher.PropertiesToLoad.Clear()
+    $Searcher.PropertiesToLoad.Add("adminCount") > $null
+    $result = $Searcher.FindOne()
 
     # Check if results were returned and output the adminCount property.
     if ($result -ne $null) {
