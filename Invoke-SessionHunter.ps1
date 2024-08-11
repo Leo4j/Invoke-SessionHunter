@@ -22,11 +22,8 @@ function Invoke-SessionHunter {
 	.PARAMETER Hunt
 	Show active session for the specified user only
 	
-	.PARAMETER FailSafe
-	Instructs the tool to move on if the target remote registry hangs
-	
 	.PARAMETER Timeout
-	Timeout (in seconds) for remote registry access to prevent hanging. Works in combination with -FailSafe. Default = 2, increase for slower networks.
+	Timeout (in milliseconds) for remote registry access to prevent hanging. Default = 2000, increase for slower networks.
 	
 	.PARAMETER Servers
 	Retrieve and display information about active user sessions on servers only
@@ -59,7 +56,7 @@ function Invoke-SessionHunter {
 	Invoke-SessionHunter
  	Invoke-SessionHunter -CheckAsAdmin
   	Invoke-SessionHunter -CheckAsAdmin -UserName ferrari\Administrator -Password P@ssw0rd!
-   	Invoke-SessionHunter -CheckAsAdmin -Timeout 2
+   	Invoke-SessionHunter -CheckAsAdmin -Timeout 5000
 	Invoke-SessionHunter -Domain contoso.local
 	Invoke-SessionHunter -Domain contoso.local -Servers
 	Invoke-SessionHunter -TargetsFile c:\Users\Public\Documents\targets.txt
@@ -87,7 +84,7 @@ function Invoke-SessionHunter {
 		
 		[Parameter (Mandatory=$False, Position = 4, ValueFromPipeline=$true)]
 		[int]
-		$Timeout,
+		$Timeout = 2000,
 
   		[Parameter (Mandatory=$False, Position = 5, ValueFromPipeline=$true)]
 		[String]
@@ -123,11 +120,7 @@ function Invoke-SessionHunter {
 
   		[Parameter (Mandatory=$False, Position = 13, ValueFromPipeline=$true)]
 		[Switch]
-		$CheckAsAdmin,
-		
-		[Parameter (Mandatory=$False, Position = 14, ValueFromPipeline=$true)]
-		[Switch]
-		$FailSafe
+		$CheckAsAdmin
 	
 	)
 	
@@ -266,7 +259,7 @@ function Invoke-SessionHunter {
 	foreach ($Computer in $Computers) {
 		# ScriptBlock that contains the processing code
 		$scriptBlock = {
-			param($Computer, $Domain, $searcher, $InvokeWMIRemoting, $UserName, $Password, $CheckAsAdmin, $Timeout, $FailSafe)
+			param($Computer, $Domain, $InvokeWMIRemoting, $UserName, $Password, $CheckAsAdmin, $Timeout)
 
    			# Clearing variables
 			$userSIDs = $null
@@ -275,110 +268,50 @@ function Invoke-SessionHunter {
 			$user = $null
 			$userTranslation = $null
    			$AdminStatus = $False
-    			$TempHostname = $Computer -replace '\..*', ''
+    		$TempHostname = $Computer -replace '\..*', ''
 			$TempCurrentUser = $env:username
-   			if($Timeout){$timeoutSeconds = $Timeout}
-      			else{$timeoutSeconds = 2}
 
 			# Gather computer information
 			$ipAddress = Resolve-DnsName $Computer | Where-Object { $_.Type -eq "A" } | Select-Object -ExpandProperty IPAddress
 			
 			$ErrorCheckpoint = $null
-			$Error.Clear()
+			$Result = $null
 			
    			if($CheckAsAdmin){
 	   			# Check Admin Access (and Sessions)
 				if($UserName -AND $Password){
-					if($FailSafe){
-						#$timeoutSeconds = 2
-						$checkIntervalMilliseconds = 100
-						$elapsedTime = 0
-						$processOutput = $null
-
-						$command = @"
-						`$cred = New-Object System.Management.Automation.PSCredential('$UserName', (ConvertTo-SecureString -String '$Password' -AsPlainText -Force));
-						Get-WmiObject -Class Win32_OperatingSystem -ComputerName '$Computer' -Credential `$cred > `$null
-"@
-
-						# Start the process and capture output directly
-						$processStartInfo = New-Object System.Diagnostics.ProcessStartInfo
-						$processStartInfo.FileName = "powershell.exe"
-						$processStartInfo.Arguments = "-Command $command"
-						$processStartInfo.RedirectStandardOutput = $true
-						$processStartInfo.UseShellExecute = $false
-
-						$process = New-Object System.Diagnostics.Process
-						$process.StartInfo = $processStartInfo
-
-						$process.Start() | Out-Null
-
-						while (-not $process.HasExited -and $elapsedTime -lt ($timeoutSeconds * 1000)) {
-							Start-Sleep -Milliseconds $checkIntervalMilliseconds
-							$elapsedTime += $checkIntervalMilliseconds
-						}
-
-						if (-not $process.HasExited) {
-							# Kill the process if it's still running
-							$process.Kill()
-							$ErrorCheckpoint = "ErrorCheckpoint"
-						} else {
-							$Error.Clear()
-							$SecPassword = ConvertTo-SecureString $Password -AsPlainText -Force
-							$cred = New-Object System.Management.Automation.PSCredential($UserName,$SecPassword)
-							Get-WmiObject -Class Win32_OperatingSystem -ComputerName $Computer -Credential $cred > $null
-						}
-
-						$process.Close()
-					}
-					else{
-						$Error.Clear()
-						$SecPassword = ConvertTo-SecureString $Password -AsPlainText -Force
-						$cred = New-Object System.Management.Automation.PSCredential($UserName,$SecPassword)
-						Get-WmiObject -Class Win32_OperatingSystem -ComputerName $Computer -Credential $cred > $null
-					}
+					$Command = "`$cred = New-Object System.Management.Automation.PSCredential('$UserName', (ConvertTo-SecureString -String '$Password' -AsPlainText -Force));Get-WmiObject -Class Win32_OperatingSystem -ComputerName '$Computer' -Credential `$cred"
+					$Process = New-Object System.Diagnostics.Process
+					$Process.StartInfo.FileName = "powershell.exe"
+					$Process.StartInfo.Arguments = "-Command $Command"
+					$Process.StartInfo.RedirectStandardOutput = $true
+					$Process.StartInfo.RedirectStandardError = $true
+					$Process.StartInfo.UseShellExecute = $false
+					$Process.StartInfo.CreateNoWindow = $true
+					$Process.Start() | Out-Null
+					if ($Process.WaitForExit($Timeout)) {$Result = $Process.StandardOutput.ReadToEnd()}
+					else {$Process.Kill()}
+					$Process.Dispose()
+					if(!$Result){$ErrorCheckpoint = "ErrorCheckpoint"}
 				}
 				else{
-					if($FailSafe){
-						#$timeoutSeconds = 2
-						$checkIntervalMilliseconds = 100
-						$elapsedTime = 0
-						$processOutput = $null
-
-						# Start the process and capture output directly
-						$processStartInfo = New-Object System.Diagnostics.ProcessStartInfo
-						$processStartInfo.FileName = "powershell.exe"
-						$processStartInfo.Arguments = "-Command ""Get-WmiObject -Class Win32_OperatingSystem -ComputerName '$Computer' > `$null"""
-						$processStartInfo.RedirectStandardOutput = $true
-						$processStartInfo.UseShellExecute = $false
-
-						$process = New-Object System.Diagnostics.Process
-						$process.StartInfo = $processStartInfo
-
-						$process.Start() | Out-Null
-
-						while (-not $process.HasExited -and $elapsedTime -lt ($timeoutSeconds * 1000)) {
-							Start-Sleep -Milliseconds $checkIntervalMilliseconds
-							$elapsedTime += $checkIntervalMilliseconds
-						}
-
-						if (-not $process.HasExited) {
-							# Kill the process if it's still running
-							$process.Kill()
-							$ErrorCheckpoint = "ErrorCheckpoint"
-						} else {
-							$Error.Clear()
-							Get-WmiObject -Class Win32_OperatingSystem -ComputerName $Computer > $null
-						}
-
-						$process.Close()
-						}
-					else{
-						$Error.Clear()
-						Get-WmiObject -Class Win32_OperatingSystem -ComputerName $Computer > $null
-					}
+					$Command = "Get-WmiObject -Class Win32_OperatingSystem -ComputerName '$Computer'"
+					$Process = New-Object System.Diagnostics.Process
+					$Process.StartInfo.FileName = "powershell.exe"
+					$Process.StartInfo.Arguments = "-Command $Command"
+					$Process.StartInfo.RedirectStandardOutput = $true
+					$Process.StartInfo.RedirectStandardError = $true
+					$Process.StartInfo.UseShellExecute = $false
+					$Process.StartInfo.CreateNoWindow = $true
+					$Process.Start() | Out-Null
+					if ($Process.WaitForExit($Timeout)) {$Result = $Process.StandardOutput.ReadToEnd()}
+					else {$Process.Kill()}
+					$Process.Dispose()
+					if(!$Result){$ErrorCheckpoint = "ErrorCheckpoint"}
 				}
-    			} else {$ErrorCheckpoint = "ErrorCheckpoint"}
-			if(($error[0] -eq $null) -AND (-not $ErrorCheckpoint)){
+    		} else {$ErrorCheckpoint = "ErrorCheckpoint"}
+			
+			if(-not $ErrorCheckpoint){
 				$AdminStatus = $True
 				. ([scriptblock]::Create($InvokeWMIRemoting))
 				if($UserName -AND $Password){$CheckSessionsAsAdmin = Invoke-WMIRemoting -ComputerName $Computer -UserName $UserName -Password $Password -Command "klist sessions"}
@@ -406,7 +339,7 @@ function Invoke-SessionHunter {
 					}
 					
 					if($UserName -AND $Password){
-							$UserNameDomainSplit = $UserName -split '\\'
+						$UserNameDomainSplit = $UserName -split '\\'
 						$UserNameSplit = $UserNameDomainSplit[1]
 						$filtered = $matches | Where-Object {
 							# Split the entry based on "\"
@@ -437,49 +370,24 @@ function Invoke-SessionHunter {
 						}
 					}
 				}
-				
-				$Error.Clear()
 	   		}
 
-			if(($error[0] -ne $null) -OR $ErrorCheckpoint){
+			if($ErrorCheckpoint){
 				
 				$remoteRegistry = $null
-				
-				if($FailSafe){
-					#$timeoutSeconds = 2
-					$checkIntervalMilliseconds = 100
-					$elapsedTime = 0
-					$processOutput = $null
-
-					# Start the process and capture output directly
-					$processStartInfo = New-Object System.Diagnostics.ProcessStartInfo
-					$processStartInfo.FileName = "powershell.exe"
-					$processStartInfo.Arguments = "-Command ""[Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('Users', '$Computer')"""
-					$processStartInfo.RedirectStandardOutput = $true
-					$processStartInfo.UseShellExecute = $false
-
-					$process = New-Object System.Diagnostics.Process
-					$process.StartInfo = $processStartInfo
-
-					$process.Start() | Out-Null
-
-					while (-not $process.HasExited -and $elapsedTime -lt ($timeoutSeconds * 1000)) {
-								Start-Sleep -Milliseconds $checkIntervalMilliseconds
-								$elapsedTime += $checkIntervalMilliseconds
-							}
-
-					if (-not $process.HasExited) {
-						# Kill the process if it's still running
-						$process.Kill()
-									continue
-					} else {
-						$remoteRegistry = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('Users', $Computer)
-					}
-
-					$process.Close()
-				}
-				
-				else{$remoteRegistry = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('Users', $Computer)}
+				$Result = $null
+				$Command = "[Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('Users', '$Computer')"
+				$Process = New-Object System.Diagnostics.Process
+				$Process.StartInfo.FileName = "powershell.exe"
+				$Process.StartInfo.Arguments = "-NoProfile -Command `"& {$Command}`""
+				$Process.StartInfo.RedirectStandardOutput = $true
+				$Process.StartInfo.RedirectStandardError = $true
+				$Process.StartInfo.UseShellExecute = $false
+				$Process.StartInfo.CreateNoWindow = $true
+				$Process.Start() | Out-Null
+				if ($Process.WaitForExit($Timeout)) {$remoteRegistry = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('Users', $Computer)}
+				else {$Process.Kill()}
+				$Process.Dispose()
 				
 				if($remoteRegistry -ne $null){
 	
@@ -535,7 +443,7 @@ function Invoke-SessionHunter {
 			return $results
 		}
 
-		$runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($Computer).AddArgument($Domain).AddArgument($searcher).AddArgument($InvokeWMIRemoting).AddArgument($UserName).AddArgument($Password).AddArgument($CheckAsAdmin).AddArgument($Timeout).AddArgument($FailSafe)
+		$runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($Computer).AddArgument($Domain).AddArgument($InvokeWMIRemoting).AddArgument($UserName).AddArgument($Password).AddArgument($CheckAsAdmin).AddArgument($Timeout)
 		$runspace.RunspacePool = $runspacePool
 		$runspaces += [PSCustomObject]@{ Pipe = $runspace; Status = $runspace.BeginInvoke() }
 	}
@@ -558,9 +466,9 @@ function Invoke-SessionHunter {
 			$target = "$($result.HostName).$($result.Domain)"
 			
 			$powershell = [powershell]::Create().AddScript({
-				$Timeout = 2000
+				param($target, $Timeout)
 				$Result = $null
-				$Command = "Get-WmiObject -Class Win32_OperatingSystem -ComputerName '$args'"
+				$Command = "Get-WmiObject -Class Win32_OperatingSystem -ComputerName '$target'"
 				$Process = New-Object System.Diagnostics.Process
 				$Process.StartInfo.FileName = "powershell.exe"
 				$Process.StartInfo.Arguments = "-NoProfile -Command `"& {$Command}`""
@@ -574,7 +482,7 @@ function Invoke-SessionHunter {
 				$Process.Dispose()
 				if ($Result) {return $True}
 				else {return $False}
-			}).AddArgument($target)
+			}).AddArgument($target).AddArgument($Timeout)
 	
 			$powershell.RunspacePool = $runspacePool
 	
@@ -628,7 +536,7 @@ function Invoke-SessionHunter {
 				$FinalResults = $allResults | Sort-Object -Unique Domain,Access,AdmCount,HostName,UserSession
 				$FinalResults
 			}
-     		}
+     	}
 	}
 	else{
 		if($Hunt){
@@ -666,14 +574,14 @@ function Invoke-SessionHunter {
 
  	try{
   		$FinalPlusResults | Out-File $pwd\SessionHunter.txt -Force
-    		Write-Output "[+] Output saved to: $pwd\SessionHunter.txt"
+    	Write-Output "[+] Output saved to: $pwd\SessionHunter.txt"
 		Write-Output ""
-    	}
+    }
   	catch{
    		$FinalPlusResults | Out-File c:\Users\Public\Document\SessionHunter.txt -Force
-    		Write-Output "[+] Output saved to: c:\Users\Public\Document\SessionHunter.txt"
+    	Write-Output "[+] Output saved to: c:\Users\Public\Document\SessionHunter.txt"
 		Write-Output ""
-    	}
+    }
 
 	Write-Host "[+] Elapsed time: $($elapsedTime.Hours):$($elapsedTime.Minutes):$($elapsedTime.Seconds).$($elapsedTime.Milliseconds)"
  	Write-Host ""
