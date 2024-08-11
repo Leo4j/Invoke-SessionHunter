@@ -548,83 +548,51 @@ function Invoke-SessionHunter {
 	}
 
  	if(!$CheckAsAdmin){
-		if($FailSafe){
-			if($Timeout){$timeoutSeconds = $Timeout}
-      			else{$timeoutSeconds = 2}
-			$checkIntervalMilliseconds = 100
-
-			foreach ($result in $allResults) {
-				$Computer = "$($result.HostName).$($result.Domain)"
-				$elapsedTime = 0
-				$ErrorCheckpoint = $null
-
-				# Start the process and capture output directly
-				$processStartInfo = New-Object System.Diagnostics.ProcessStartInfo
-				$processStartInfo.FileName = "powershell.exe"
-				$processStartInfo.Arguments = "-Command ""Get-WmiObject -Class Win32_OperatingSystem -ComputerName '$Computer' > `$null"""
-				$processStartInfo.RedirectStandardOutput = $true
-				$processStartInfo.UseShellExecute = $false
-
-				$process = New-Object System.Diagnostics.Process
-				$process.StartInfo = $processStartInfo
-
-				$process.Start() | Out-Null
-
-				while (-not $process.HasExited -and $elapsedTime -lt ($timeoutSeconds * 1000)) {
-					Start-Sleep -Milliseconds $checkIntervalMilliseconds
-					$elapsedTime += $checkIntervalMilliseconds
-				}
-
-				if (-not $process.HasExited) {
-					# Kill the process if it's still running
-					$process.Kill()
-					$ErrorCheckpoint = "ErrorCheckpoint"
-					$result.Access = $false
-				} else {
-					$Error.Clear()
-					Get-WmiObject -Class Win32_OperatingSystem -ComputerName $Computer > $null
-					$result.Access = ($error[0] -eq $null)
-				}
-
-				$process.Close()
+		# Define RunspacePool
+		$runspacePool = [runspacefactory]::CreateRunspacePool(1, 10)
+		$runspacePool.Open()
+	
+		$runspaces = @()
+	
+		foreach ($result in $allResults) {
+			$target = "$($result.HostName).$($result.Domain)"
+			
+			$powershell = [powershell]::Create().AddScript({
+				$Timeout = 2000
+				$Result = $null
+				$Command = "Get-WmiObject -Class Win32_OperatingSystem -ComputerName '$args'"
+				$Process = New-Object System.Diagnostics.Process
+				$Process.StartInfo.FileName = "powershell.exe"
+				$Process.StartInfo.Arguments = "-NoProfile -Command `"& {$Command}`""
+				$Process.StartInfo.RedirectStandardOutput = $true
+				$Process.StartInfo.RedirectStandardError = $true
+				$Process.StartInfo.UseShellExecute = $false
+				$Process.StartInfo.CreateNoWindow = $true
+				$Process.Start() | Out-Null
+				if ($Process.WaitForExit($Timeout)) {$Result = $Process.StandardOutput.ReadToEnd()}
+				else {$Process.Kill()}
+				$Process.Dispose()
+				if ($Result) {return $True}
+				else {return $False}
+			}).AddArgument($target)
+	
+			$powershell.RunspacePool = $runspacePool
+	
+			$runspaces += [PSCustomObject]@{
+				PowerShell = $powershell
+				Status = $powershell.BeginInvoke()
+				Result = $result
 			}
 		}
-		
-		else{
-			# Define RunspacePool
-			$runspacePool = [runspacefactory]::CreateRunspacePool(1, 10)
-			$runspacePool.Open()
-		
-			$runspaces = @()
-		
-			foreach ($result in $allResults) {
-				$target = "$($result.HostName).$($result.Domain)"
-				
-				$powershell = [powershell]::Create().AddScript({
-					$Error.Clear()
-					Get-WmiObject -Class Win32_OperatingSystem -ComputerName $args > $null
-					#ls "\\$args\c$" > $null
-					return ($error[0] -eq $null)
-				}).AddArgument($target)
-		
-				$powershell.RunspacePool = $runspacePool
-		
-				$runspaces += [PSCustomObject]@{
-					PowerShell = $powershell
-					Status = $powershell.BeginInvoke()
-					Result = $result
-				}
-			}
-		
-			# Wait and collect results
-			foreach ($runspace in $runspaces) {
-				$runspace.Result.Access = [bool]($runspace.PowerShell.EndInvoke($runspace.Status))
-				$runspace.PowerShell.Dispose()
-			}
-		
-			$runspacePool.Close()
-			$runspacePool.Dispose()
+	
+		# Wait and collect results
+		foreach ($runspace in $runspaces) {
+			$runspace.Result.Access = [bool]($runspace.PowerShell.EndInvoke($runspace.Status))
+			$runspace.PowerShell.Dispose()
 		}
+	
+		$runspacePool.Close()
+		$runspacePool.Dispose()
 	}
 	
 	foreach ($result in $allResults) {
