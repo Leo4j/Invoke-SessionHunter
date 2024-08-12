@@ -9,17 +9,19 @@ It's important to note that the remote registry service needs to be running on t
 
 ### Usage:
 
+Load Invoke-SessionHunter in memory
+
 ```
 iex(new-object net.webclient).downloadstring('https://raw.githubusercontent.com/Leo4j/Invoke-SessionHunter/main/Invoke-SessionHunter.ps1')
 ```
 
-If run without parameters or switches it will retrieve active sessions for all computers in the current domain by querying the registry
+If run without parameters or switches it will retrieve active sessions for all computers in the current domain by querying their remote registry
 
 ```
 Invoke-SessionHunter
 ```
 
-Gather sessions by authenticating to targets where you have local admin access
+Gather sessions by authenticating to targets where you have local admin access ('klist sessions' command is run on targets)
 
 ```
 Invoke-SessionHunter -CheckAsAdmin
@@ -31,15 +33,22 @@ You can optionally provide credentials in the following format
 Invoke-SessionHunter -CheckAsAdmin -UserName "ferrari\Administrator" -Password "P@ssw0rd!"
 ```
 
-You can also use the -FailSafe switch, which will direct the tool to proceed if the target remote registry becomes unresponsive.
+Invoke-SessionHunter is designed to keep your host machine, your current user, and the provided username out of scope. 
 
-This works in cobination with -Timeout | Default = 2, increase for slower networks.
+As a result, they won't show among the retrieved sessions.
+
+If you want to include them within the retrieved results please provide the -ShowAll and/or -IncludeLocalHost flags.
 
 ```
-Invoke-SessionHunter -FailSafe
+Invoke-SessionHunter -ShowAll -IncludeLocalHost
 ```
+
+Invoke-SessionHunter will skip any target where the remote registry fails to respond within 2000ms (2 seconds).
+
+You have control on the timeout by providing the -Timeout parameter | Default = 2000, increase for slower networks.
+
 ```
-Invoke-SessionHunter -FailSafe -Timeout 5
+Invoke-SessionHunter -Timeout 5000
 ```
 
 Use the -Match switch to show only targets where you have admin access and a privileged user is logged in
@@ -51,7 +60,7 @@ Invoke-SessionHunter -Match
 All switches can be combined
 
 ```
-Invoke-SessionHunter -CheckAsAdmin -UserName "ferrari\Administrator" -Password "P@ssw0rd!" -FailSafe -Timeout 5 -Match
+Invoke-SessionHunter -CheckAsAdmin -UserName "ferrari\Administrator" -Password "P@ssw0rd!" -Timeout 5000 -Match
 ```
 
 ![image](https://github.com/Leo4j/Invoke-SessionHunter/assets/61951374/0505d8d7-231a-4e3e-b157-58900e7bba85)
@@ -90,12 +99,6 @@ Invoke-SessionHunter -Workstations
 Invoke-SessionHunter -Hunt "Administrator"
 ```
 
-### Exclude localhost from the sessions retrieval
-
-```
-Invoke-SessionHunter -IncludeLocalHost
-```
-
 ### Return custom PSObjects instead of table-formatted results
 
 ```
@@ -104,7 +107,7 @@ Invoke-SessionHunter -RawResults
 
 ### Do not run a port scan to enumerate for alive hosts before trying to retrieve sessions
 
-Note: if a host is not reachable it will hang for a while
+Note: if a host is not reachable it may hang for a while
 
 ```
 Invoke-SessionHunter -NoPortScan
