@@ -31,8 +31,8 @@ function Invoke-SessionHunter {
 	.PARAMETER Workstations
 	Retrieve and display information about active user sessions on workstations only
 	
-	.PARAMETER ExcludeLocalHost
-	Exclude localhost from the sessions retrieval
+	.PARAMETER IncludeLocalHost
+	Include localhost within the sessions retrieval
 
  	.PARAMETER UserName
 	Check sessions authenticating to targets as the specified UserName
@@ -51,14 +51,17 @@ function Invoke-SessionHunter {
 
    	.PARAMETER CheckAsAdmin
   	Retrieve sessions as an admin where you have local admin privileges; otherwise, use the registry.
+	
+	.PARAMETER ShowAll
+  	Retrieve all sessions, including those for the current user and the username provided
 
 	.EXAMPLE
 	Invoke-SessionHunter
  	Invoke-SessionHunter -CheckAsAdmin
-  	Invoke-SessionHunter -CheckAsAdmin -UserName ferrari\Administrator -Password P@ssw0rd!
+  	Invoke-SessionHunter -CheckAsAdmin -UserName "ferrari\Administrator" -Password "P@ssw0rd!"
    	Invoke-SessionHunter -CheckAsAdmin -Timeout 5000
-	Invoke-SessionHunter -Domain contoso.local
-	Invoke-SessionHunter -Domain contoso.local -Servers
+	Invoke-SessionHunter -Domain "contoso.local"
+	Invoke-SessionHunter -Domain "contoso.local" -Servers
 	Invoke-SessionHunter -TargetsFile c:\Users\Public\Documents\targets.txt
 	Invoke-SessionHunter -Hunt "Administrator"
 	
@@ -120,7 +123,11 @@ function Invoke-SessionHunter {
 
   		[Parameter (Mandatory=$False, Position = 13, ValueFromPipeline=$true)]
 		[Switch]
-		$CheckAsAdmin
+		$CheckAsAdmin,
+		
+		[Parameter (Mandatory=$False, Position = 14, ValueFromPipeline=$true)]
+		[Switch]
+		$ShowAll
 	
 	)
 	
@@ -259,7 +266,7 @@ function Invoke-SessionHunter {
 	foreach ($Computer in $Computers) {
 		# ScriptBlock that contains the processing code
 		$scriptBlock = {
-			param($Computer, $Domain, $InvokeWMIRemoting, $UserName, $Password, $CheckAsAdmin, $Timeout)
+			param($Computer, $Domain, $InvokeWMIRemoting, $UserName, $Password, $CheckAsAdmin, $Timeout, $ShowAll)
 
    			# Clearing variables
 			$userSIDs = $null
@@ -341,17 +348,35 @@ function Invoke-SessionHunter {
 					if($UserName -AND $Password){
 						$UserNameDomainSplit = $UserName -split '\\'
 						$UserNameSplit = $UserNameDomainSplit[1]
-						$filtered = $matches | Where-Object {
-							# Split the entry based on "\"
-							$splitEntry = $_ -split '\\'
-							($splitEntry[0] -notlike "* *") -and ($splitEntry[0] -ne $TempHostname) -and ($splitEntry[1] -notlike "*$TempHostname*") -and ($splitEntry[1] -notlike "*$UserNameSplit*") -and ($splitEntry[1] -ne $TempCurrentUser)
+						if($ShowAll){
+							$filtered = $matches | Where-Object {
+								# Split the entry based on "\"
+								$splitEntry = $_ -split '\\'
+								($splitEntry[0] -notlike "* *") -and ($splitEntry[0] -ne $TempHostname) -and ($splitEntry[1] -notlike "*$TempHostname*")
+							}
+						}
+						else{
+							$filtered = $matches | Where-Object {
+								# Split the entry based on "\"
+								$splitEntry = $_ -split '\\'
+								($splitEntry[0] -notlike "* *") -and ($splitEntry[0] -ne $TempHostname) -and ($splitEntry[1] -notlike "*$TempHostname*") -and ($splitEntry[1] -notlike "*$UserNameSplit*") -and ($splitEntry[1] -ne $TempCurrentUser)
+							}
 						}
 					}
 					else{
-						$filtered = $matches | Where-Object {
-							# Split the entry based on "\"
-							$splitEntry = $_ -split '\\'
-							($splitEntry[0] -notlike "* *") -and ($splitEntry[0] -ne $TempHostname) -and ($splitEntry[1] -notlike "*$TempHostname*") -and ($splitEntry[1] -ne $TempCurrentUser)
+						if($ShowAll){
+							$filtered = $matches | Where-Object {
+								# Split the entry based on "\"
+								$splitEntry = $_ -split '\\'
+								($splitEntry[0] -notlike "* *") -and ($splitEntry[0] -ne $TempHostname) -and ($splitEntry[1] -notlike "*$TempHostname*")
+							}
+						}
+						else{
+							$filtered = $matches | Where-Object {
+								# Split the entry based on "\"
+								$splitEntry = $_ -split '\\'
+								($splitEntry[0] -notlike "* *") -and ($splitEntry[0] -ne $TempHostname) -and ($splitEntry[1] -notlike "*$TempHostname*") -and ($splitEntry[1] -ne $TempCurrentUser)
+							}
 						}
 					}
 
@@ -376,23 +401,27 @@ function Invoke-SessionHunter {
 				
 				$remoteRegistry = $null
 				$Result = $null
-				$Command = "[Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('Users', '$Computer')"
+				$Command = "([Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('Users', '$Computer')).GetSubKeyNames()"
 				$Process = New-Object System.Diagnostics.Process
 				$Process.StartInfo.FileName = "powershell.exe"
-				$Process.StartInfo.Arguments = "-NoProfile -Command `"& {$Command}`""
+				$Process.StartInfo.Arguments = "-NoProfile -Command $Command"
 				$Process.StartInfo.RedirectStandardOutput = $true
 				$Process.StartInfo.RedirectStandardError = $true
 				$Process.StartInfo.UseShellExecute = $false
 				$Process.StartInfo.CreateNoWindow = $true
 				$Process.Start() | Out-Null
-				if ($Process.WaitForExit($Timeout)) {$remoteRegistry = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('Users', $Computer)}
+				if ($Process.WaitForExit($Timeout)) {$remoteRegistry = $Process.StandardOutput.ReadToEnd()}
 				else {$Process.Kill()}
 				$Process.Dispose()
 				
 				if($remoteRegistry -ne $null){
+					
+					$remoteRegistry = ($remoteRegistry | Out-String) -split "`n"
+					$remoteRegistry = $remoteRegistry.Trim()
+					$remoteRegistry = $remoteRegistry | Where-Object { $_ -ne "" }
 	
 					# Get the subkeys under HKEY_USERS
-					$userKeys = $remoteRegistry.GetSubKeyNames()
+					$userKeys = $remoteRegistry
 		
 					# Initialize an array to store the user SIDs
 					$userSIDs = @()
@@ -420,16 +449,32 @@ function Invoke-SessionHunter {
 							
 							$splitEntry = $userTranslation -split '\\'
 							
-							if(($splitEntry[0] -notlike "* *") -and ($splitEntry[0] -ne $TempHostname) -and ($splitEntry[1] -notlike "*$TempHostname*") -and ($splitEntry[1] -ne $TempCurrentUser)){
-								$results += [PSCustomObject]@{
-									Domain           = $Domain
-									HostName         = $TempHostname
-									IPAddress        = $ipAddress
-									OperatingSystem  = $null
-									Method           = "Registry"
-									Access           = $AdminStatus
-									UserSession      = $userTranslation
-									AdmCount         = "NO"
+							if($ShowAll){
+								if(($splitEntry[0] -notlike "* *") -and ($splitEntry[0] -ne $TempHostname) -and ($splitEntry[1] -notlike "*$TempHostname*")){
+									$results += [PSCustomObject]@{
+										Domain           = $Domain
+										HostName         = $TempHostname
+										IPAddress        = $ipAddress
+										OperatingSystem  = $null
+										Method           = "Registry"
+										Access           = $AdminStatus
+										UserSession      = $userTranslation
+										AdmCount         = "NO"
+									}
+								}
+							}
+							else{
+								if(($splitEntry[0] -notlike "* *") -and ($splitEntry[0] -ne $TempHostname) -and ($splitEntry[1] -notlike "*$TempHostname*") -and ($splitEntry[1] -ne $TempCurrentUser)){
+									$results += [PSCustomObject]@{
+										Domain           = $Domain
+										HostName         = $TempHostname
+										IPAddress        = $ipAddress
+										OperatingSystem  = $null
+										Method           = "Registry"
+										Access           = $AdminStatus
+										UserSession      = $userTranslation
+										AdmCount         = "NO"
+									}
 								}
 							}
 						} catch {}
@@ -443,7 +488,7 @@ function Invoke-SessionHunter {
 			return $results
 		}
 
-		$runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($Computer).AddArgument($Domain).AddArgument($InvokeWMIRemoting).AddArgument($UserName).AddArgument($Password).AddArgument($CheckAsAdmin).AddArgument($Timeout)
+		$runspace = [powershell]::Create().AddScript($scriptBlock).AddArgument($Computer).AddArgument($Domain).AddArgument($InvokeWMIRemoting).AddArgument($UserName).AddArgument($Password).AddArgument($CheckAsAdmin).AddArgument($Timeout).AddArgument($ShowAll)
 		$runspace.RunspacePool = $runspacePool
 		$runspaces += [PSCustomObject]@{ Pipe = $runspace; Status = $runspace.BeginInvoke() }
 	}
@@ -471,7 +516,7 @@ function Invoke-SessionHunter {
 				$Command = "Get-WmiObject -Class Win32_OperatingSystem -ComputerName '$target'"
 				$Process = New-Object System.Diagnostics.Process
 				$Process.StartInfo.FileName = "powershell.exe"
-				$Process.StartInfo.Arguments = "-NoProfile -Command `"& {$Command}`""
+				$Process.StartInfo.Arguments = "-NoProfile -Command $Command"
 				$Process.StartInfo.RedirectStandardOutput = $true
 				$Process.StartInfo.RedirectStandardError = $true
 				$Process.StartInfo.UseShellExecute = $false
@@ -504,10 +549,10 @@ function Invoke-SessionHunter {
 	}
 	
 	foreach ($result in $allResults) {
-		$username = ($result.UserSession -split '\\')[1]
+		$tempusername = ($result.UserSession -split '\\')[1]
 		$TargetHost = $result.HostName
-		if($username -like '*$'){$result.AdmCount = "N/A"}
-		else{$result.AdmCount = AdminCount -UserName $username -Domain $Domain}
+		if($tempusername -like '*$'){$result.AdmCount = "N/A"}
+		else{$result.AdmCount = AdminCount -UserName $tempusername -Domain $Domain}
 		$result.OperatingSystem = Get-OS -HostName $TargetHost -Domain $Domain
 	}
 	
@@ -515,6 +560,8 @@ function Invoke-SessionHunter {
 
   	$Host.UI.RawUI.ForegroundColor = $currentTextColor
 	$Host.UI.RawUI.BackgroundColor = $Color
+	
+	if($UserName -AND !$ShowAll){$allresults = $allresults | Where-Object {$_.UserSession -ne $UserName}}
 
 	if($RawResults){
 		if($Hunt){
