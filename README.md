@@ -37,7 +37,7 @@ Invoke-SessionHunter is designed to keep your host machine, your current user, a
 
 As a result, they won't show among the retrieved sessions.
 
-If you want to include them within the retrieved results please provide the -ShowAll and/or -IncludeLocalHost flags.
+If you want to include them within the retrieved results please provide the -ShowAll and/or -IncludeLocalHost switches.
 
 ```
 Invoke-SessionHunter -ShowAll -IncludeLocalHost
